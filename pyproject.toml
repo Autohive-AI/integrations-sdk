@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autohive_integrations_sdk"
-version = "0.0.1"
+version = "0.0.2"
 authors = [
   { name="Hamish Taylor", email="hamish@autohive.com" },
   { name="Reilly Oldham", email="reilly@autohive.com" },
@@ -21,7 +21,7 @@ classifiers = [
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    
+
 
 ]
 license = "MIT"

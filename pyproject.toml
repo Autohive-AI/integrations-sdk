@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "autohive_integrations_sdk"
+version = "0.0.1"
+authors = [
+  { name="Hamish Taylor", email="hamish@autohive.com" },
+  { name="Reilly Oldham", email="reilly@autohive.com" },
+  { name="Kai Koenig", email="kai@autohive.com" },
+]
+description = "Integrations SDK for Autohive"
+readme = "README.md"
+requires-python = ">=3.13"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    
+
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Homepage = "https://github.com/Autohive-AI/integrations-sdk"
+Issues = "https://github.com/Autohive-AI/integrations-sdk/issues"

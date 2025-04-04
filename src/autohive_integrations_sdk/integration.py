@@ -285,7 +285,7 @@ class Integration:
         self._webhook_handlers: Dict[str, Type[WebhookTriggerHandler]] = {}
 
     @classmethod
-    def load(cls, config_path: Union[str, Path] = os.path.join(os.path.dirname(__file__), 'config.json')) -> 'Integration':
+    def load(cls, config_path: Union[str, Path] = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.json')) -> 'Integration':
         """Load integration from JSON configuration"""
         config_path = Path(config_path)
 

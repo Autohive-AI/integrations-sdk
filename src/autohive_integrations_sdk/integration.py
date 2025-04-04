@@ -5,8 +5,7 @@ import asyncio
 import json as jsonX
 from urllib.parse import urlencode
 import logging
-from datetime import datetime, timedelta
-import yaml
+from datetime import timedelta
 from pathlib import Path
 from abc import ABC, abstractmethod
 import json
@@ -20,6 +19,7 @@ T = TypeVar('T')
 
 # ---- Auth Types ----
 class AuthType(Enum):
+    """The type of authentication to use"""
     PlatformOauth2 = "PlatformOauth2"
     PlatformTeams = "PlatformTeams"
     ApiKey = "ApiKey"
@@ -28,11 +28,14 @@ class AuthType(Enum):
 
 # ---- Exceptions ----
 class ValidationError(Exception):
-    """Raised when input validation fails"""
+    """Raised when inputs/outputs validation fails"""
     def __init__(self, message: str, schema: str = None, inputs: str = None):
         self.schema = schema
+        """The schema that failed validation"""
         self.inputs = inputs
+        """The data that failed validation"""
         self.message = message
+        """The error message"""
         super().__init__(message)
 
 class ConfigurationError(Exception):
@@ -43,14 +46,18 @@ class HTTPError(Exception):
     """Custom HTTP error with detailed information"""
     def __init__(self, status: int, message: str, response_data: Any = None):
         self.status = status
+        """Status code"""
         self.message = message
+        """Error message"""
         self.response_data = response_data
+        """Response data"""
         super().__init__(f"HTTP {status}: {message}")
 
 class RateLimitError(HTTPError):
     """Raised when rate limited by the API"""
     def __init__(self, retry_after: int, *args, **kwargs):
         self.retry_after = retry_after
+        """Retry after"""
         super().__init__(*args, **kwargs)
 
 # ---- Configuration Classes ----
@@ -134,7 +141,10 @@ class WebhookTriggerHandler(ABC):
 
 # ---- Core SDK Classes ----
 class ExecutionContext:
-    """Context provided to integration handlers for making authenticated HTTP requests"""
+    """Context provided to integration handlers for making authenticated HTTP requests.
+    
+    This class manages authentication, HTTP sessions, and provides a convenient interface
+    for making API requests with automatic retries, error handling, and logging."""
     def __init__(
         self,
         auth: Dict[str, Any] = {}, 
@@ -143,9 +153,13 @@ class ExecutionContext:
         logger: Optional[logging.Logger] = None
     ):
         self.auth = auth
+        """Authentication configuration"""
         self.config = request_config or {"max_retries": 3, "timeout": 30}
+        """Request configuration"""
         self.metadata = metadata or {}
+        """Additional metadata"""
         self.logger = logger or logging.getLogger(__name__)
+        """Logger instance"""
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def __aenter__(self):
@@ -170,7 +184,29 @@ class ExecutionContext:
             timeout: Optional[int] = None,
             retry_count: int = 0
     ) -> Any:
-        """Make an authenticated HTTP request"""
+        """Make an authenticated HTTP request.
+        
+        This method handles authentication, retries, error handling, and response parsing.
+        
+        Args:
+            url: The URL to request
+            method: HTTP method to use. Defaults to "GET".
+            params: Query parameters
+            data: Request body data
+            json: JSON data to send (will set content_type to application/json)
+            headers: Additional HTTP headers
+            content_type: Content-Type header
+            timeout: Request timeout in seconds
+            retry_count: Current retry attempt (used internally)
+            
+        Returns:
+            Response data, parsed as JSON if possible
+            
+        Raises:
+            HTTPError: For HTTP error responses
+            RateLimitError: When rate limited by the API
+            Exception: For other request errors
+        """
         if not self._session:
             self._session = aiohttp.ClientSession()
 
@@ -276,17 +312,44 @@ class ExecutionContext:
 
 
 class Integration:
-    """Base integration class with handler registration and execution"""
+    """Base integration class with handler registration and execution.
+    
+    This class manages the integration configuration, handler registration,
+    and provides methods to execute actions and triggers.
+    
+    Args:
+        config: Integration configuration
+        
+    Attributes:
+        config: Integration configuration
+    """
 
     def __init__(self, config: IntegrationConfig):
         self.config = config
+        """Integration configuration"""
         self._action_handlers: Dict[str, Type[ActionHandler]] = {}
+        """Action handlers"""
         self._polling_handlers: Dict[str, Type[PollingTriggerHandler]] = {}
+        """Polling handlers"""
         self._webhook_handlers: Dict[str, Type[WebhookTriggerHandler]] = {}
+        """Webhook handlers"""
 
     @classmethod
-    def load(cls, config_path: Union[str, Path] = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.json')) -> 'Integration':
-        """Load integration from JSON configuration"""
+    def load(cls, config_path: Union[str, Path] = None) -> 'Integration':
+        """Load integration from JSON configuration.
+        
+        Args:
+            config_path: Path to the configuration file. Defaults to 'config.json' in the project root.
+            
+        Returns:
+            Initialized integration instance
+            
+        Raises:
+            ConfigurationError: If configuration is invalid or missing
+        """
+        if config_path is None:
+            config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.json')
+        
         config_path = Path(config_path)
 
         if not config_path.exists():
@@ -381,7 +444,26 @@ class Integration:
         return triggers
 
     def action(self, name: str):
-        """Decorator to register an action handler"""
+        """Decorator to register an action handler.
+        
+        Args:
+            name: Name of the action to register
+            
+        Returns:
+            Decorator function
+            
+        Raises:
+            ConfigurationError: If action is not defined in config
+            
+        Example:
+            ```python
+            @integration.action("my_action")
+            class MyActionHandler(ActionHandler):
+                async def execute(self, inputs, context):
+                    # Implementation
+                    return result
+            ```
+        """
         def decorator(handler_class: Type[ActionHandler]):
             if name not in self.config.actions:
                 raise ConfigurationError(f"Action '{name}' not defined in config")
@@ -390,7 +472,26 @@ class Integration:
         return decorator
 
     def polling_trigger(self, name: str):
-        """Decorator to register a polling trigger handler"""
+        """Decorator to register a polling trigger handler
+        
+        Args:
+            name: Name of the polling trigger to register
+            
+        Returns:
+            Decorator function
+        
+        Raises:
+            ConfigurationError: If polling trigger is not defined in config
+
+        Example:
+            ```python
+            @integration.polling_trigger("my_polling_trigger")
+            class MyPollingTriggerHandler(PollingTriggerHandler):
+                async def poll(self, inputs, last_poll_ts, context):
+                    # Implementation
+                    return result
+            ```
+        """
         def decorator(handler_class: Type[PollingTriggerHandler]):
             if name not in self.config.polling_triggers:
                 raise ConfigurationError(f"Polling trigger '{name}' not defined in config")
@@ -399,7 +500,26 @@ class Integration:
         return decorator
 
     def webhook_trigger(self, name: str):
-        """Decorator to register a webhook trigger handler"""
+        """Decorator to register a webhook trigger handler
+        
+        Args:
+            name: Name of the webhook trigger to register
+            
+        Returns:
+            Decorator function
+            
+        Raises:
+            ConfigurationError: If webhook trigger is not defined in config
+            
+        Example:
+            ```python
+            @integration.webhook_trigger("my_webhook_trigger")
+            class MyWebhookTriggerHandler(WebhookTriggerHandler):
+                async def handle(self, event, context):
+                    # Implementation
+                    return result
+            ```
+        """
         def decorator(handler_class: Type[WebhookTriggerHandler]):
             if name not in self.config.webhook_triggers:
                 raise ConfigurationError(f"Webhook trigger '{name}' not defined in config")
@@ -411,7 +531,19 @@ class Integration:
                            name: str,
                            inputs: Dict[str, Any],
                            context: ExecutionContext) -> Any:
-        """Execute a registered action"""
+        """Execute a registered action.
+        
+        Args:
+            name: Name of the action to execute
+            inputs: Action inputs
+            context: Execution context
+            
+        Returns:
+            Action result
+            
+        Raises:
+            ValidationError: If inputs or outputs don't match schema
+        """
         if name not in self._action_handlers:
             raise ValidationError(f"Action '{name}' not registered")
 
@@ -455,7 +587,20 @@ class Integration:
                                     inputs: Dict[str, Any],
                                     last_poll_ts: Optional[str],
                                     context: ExecutionContext) -> List[Dict[str, Any]]:
-        """Execute a registered polling trigger"""
+        """Execute a registered polling trigger
+        
+        Args:
+            name: Name of the polling trigger to execute
+            inputs: Trigger inputs
+            last_poll_ts: Last poll timestamp
+            context: Execution context
+            
+        Returns:
+            List of records
+            
+        Raises:
+            ValidationError: If inputs or outputs don't match schema
+        """
         if name not in self._polling_handlers:
             raise ValidationError(f"Polling trigger '{name}' not registered")
 
@@ -496,7 +641,19 @@ class Integration:
                               name: str,
                               webhook_url: str,
                               context: ExecutionContext) -> Dict[str, Any]:
-        """Subscribe to a webhook trigger"""
+        """Subscribe to a webhook trigger
+
+        Args:
+            name: Name of the webhook trigger to subscribe to
+            webhook_url: URL to subscribe to
+            context: Execution context
+            
+        Returns:
+            Subscription data
+
+        Raises:
+            ValidationError: If webhook trigger is not registered
+        """
         if name not in self._webhook_handlers:
             raise ValidationError(f"Webhook trigger '{name}' not registered")
 
@@ -514,7 +671,19 @@ class Integration:
                                  name: str,
                                  subscription_data: Dict[str, Any],
                                  context: ExecutionContext) -> None:
-        """Unsubscribe from a webhook trigger"""
+        """Unsubscribe from a webhook trigger
+
+        Args:
+            name: Name of the webhook trigger to unsubscribe from
+            subscription_data: Subscription data
+            context: Execution context
+
+        Returns:
+            None
+            
+        Raises:
+            ValidationError: If webhook trigger is not registered
+        """
         if name not in self._webhook_handlers:
             raise ValidationError(f"Webhook trigger '{name}' not registered")
 
@@ -526,7 +695,19 @@ class Integration:
                                  name: str,
                                  event: Dict[str, Any],
                                  context: ExecutionContext) -> Dict[str, Any]:
-        """Handle an incoming webhook event"""
+        """Handle an incoming webhook event
+        
+        Args:
+            name: Name of the webhook trigger to handle
+            event: Incoming webhook event
+            context: Execution context
+            
+        Returns:
+            Event result
+            
+        Raises:
+            ValidationError: If webhook trigger is not registered
+        """
         if name not in self._webhook_handlers:
             raise ValidationError(f"Webhook trigger '{name}' not registered")
 

@@ -90,13 +90,6 @@ class PollingTrigger(SchemaDefinition):
     polling_interval: timedelta = field(default_factory=timedelta)
 
 @dataclass
-class WebhookTrigger(SchemaDefinition):
-    """Definition of a webhook trigger"""
-    events: List[str] = field(default_factory=list)
-    subscribe_config: Dict[str, Any] = field(default_factory=dict)
-    unsubscribe_config: Dict[str, Any] = field(default_factory=dict)
-
-@dataclass
 class IntegrationConfig:
     """Configuration for an integration"""
     name: str
@@ -105,7 +98,6 @@ class IntegrationConfig:
     auth: Dict[str, Any]
     actions: Dict[str, Action]
     polling_triggers: Dict[str, PollingTrigger]
-    webhook_triggers: Dict[str, WebhookTrigger]
 
 # ---- Base Handler Classes ----
 class ActionHandler(ABC):
@@ -120,23 +112,6 @@ class PollingTriggerHandler(ABC):
     @abstractmethod
     async def poll(self, inputs: Dict[str, Any], last_poll_ts: Optional[str], context: 'ExecutionContext') -> List[Dict[str, Any]]:
         """Execute the polling trigger"""
-        pass
-
-class WebhookTriggerHandler(ABC):
-    """Base class for webhook trigger handlers"""
-    @abstractmethod
-    async def subscribe(self, webhook_url: str, context: 'ExecutionContext') -> Dict[str, Any]:
-        """Subscribe to webhook events"""
-        pass
-
-    @abstractmethod
-    async def unsubscribe(self, subscription_data: Dict[str, Any], context: 'ExecutionContext') -> None:
-        """Unsubscribe from webhook events"""
-        pass
-
-    @abstractmethod
-    async def handle(self, event: Dict[str, Any], context: 'ExecutionContext') -> Dict[str, Any]:
-        """Handle an incoming webhook event"""
         pass
 
 # ---- Core SDK Classes ----
@@ -331,8 +306,6 @@ class Integration:
         """Action handlers"""
         self._polling_handlers: Dict[str, Type[PollingTriggerHandler]] = {}
         """Polling handlers"""
-        self._webhook_handlers: Dict[str, Type[WebhookTriggerHandler]] = {}
-        """Webhook handlers"""
 
     @classmethod
     def load(cls, config_path: Union[str, Path] = None) -> 'Integration':
@@ -364,7 +337,6 @@ class Integration:
         # Parse configuration sections
         actions = cls._parse_actions(config_data.get("actions", {}))
         polling_triggers = cls._parse_polling_triggers(config_data.get("polling_triggers", {}))
-        webhook_triggers = cls._parse_webhook_triggers(config_data.get("webhook_triggers", {}))
 
         config = IntegrationConfig(
             name=config_data["name"],
@@ -372,8 +344,7 @@ class Integration:
             description=config_data["description"],
             auth=config_data.get("auth", {}),
             actions=actions,
-            polling_triggers=polling_triggers,
-            webhook_triggers=webhook_triggers
+            polling_triggers=polling_triggers
         )
 
         return cls(config)
@@ -420,23 +391,6 @@ class Integration:
                 name=name,
                 description=data["description"],
                 polling_interval=interval,
-                input_schema=data["input_schema"],
-                output_schema=data["output_schema"]
-            )
-
-        return triggers
-
-    @classmethod
-    def _parse_webhook_triggers(cls, triggers_config: Dict[str, Any]) -> Dict[str, WebhookTrigger]:
-        """Parse webhook trigger configurations"""
-        triggers = {}
-        for name, data in triggers_config.items():
-            triggers[name] = WebhookTrigger(
-                name=name,
-                description=data["description"],
-                events=data["events"],
-                subscribe_config=data["subscribe_config"],
-                unsubscribe_config=data["unsubscribe_config"],
                 input_schema=data["input_schema"],
                 output_schema=data["output_schema"]
             )
@@ -496,34 +450,6 @@ class Integration:
             if name not in self.config.polling_triggers:
                 raise ConfigurationError(f"Polling trigger '{name}' not defined in config")
             self._polling_handlers[name] = handler_class
-            return handler_class
-        return decorator
-
-    def webhook_trigger(self, name: str):
-        """Decorator to register a webhook trigger handler
-        
-        Args:
-            name: Name of the webhook trigger to register
-            
-        Returns:
-            Decorator function
-            
-        Raises:
-            ConfigurationError: If webhook trigger is not defined in config
-            
-        Example:
-            ```python
-            @integration.webhook_trigger("my_webhook_trigger")
-            class MyWebhookTriggerHandler(WebhookTriggerHandler):
-                async def handle(self, event, context):
-                    # Implementation
-                    return result
-            ```
-        """
-        def decorator(handler_class: Type[WebhookTriggerHandler]):
-            if name not in self.config.webhook_triggers:
-                raise ConfigurationError(f"Webhook trigger '{name}' not defined in config")
-            self._webhook_handlers[name] = handler_class
             return handler_class
         return decorator
 
@@ -636,94 +562,3 @@ class Integration:
                 raise ValidationError(e.message, e.schema, e.instance)
             
         return records
-
-    async def subscribe_webhook(self,
-                              name: str,
-                              webhook_url: str,
-                              context: ExecutionContext) -> Dict[str, Any]:
-        """Subscribe to a webhook trigger
-
-        Args:
-            name: Name of the webhook trigger to subscribe to
-            webhook_url: URL to subscribe to
-            context: Execution context
-            
-        Returns:
-            Subscription data
-
-        Raises:
-            ValidationError: If webhook trigger is not registered
-        """
-        if name not in self._webhook_handlers:
-            raise ValidationError(f"Webhook trigger '{name}' not registered")
-
-        # Create handler instance and execute subscribe
-        handler = self._webhook_handlers[name]()
-        subscription_data = await handler.subscribe(webhook_url, context)
-
-        if not isinstance(subscription_data, dict):
-            raise ValidationError(
-                f"Webhook subscribe for '{name}' must return a dictionary")
-
-        return subscription_data
-
-    async def unsubscribe_webhook(self,
-                                 name: str,
-                                 subscription_data: Dict[str, Any],
-                                 context: ExecutionContext) -> None:
-        """Unsubscribe from a webhook trigger
-
-        Args:
-            name: Name of the webhook trigger to unsubscribe from
-            subscription_data: Subscription data
-            context: Execution context
-
-        Returns:
-            None
-            
-        Raises:
-            ValidationError: If webhook trigger is not registered
-        """
-        if name not in self._webhook_handlers:
-            raise ValidationError(f"Webhook trigger '{name}' not registered")
-
-        # Create handler instance and execute unsubscribe
-        handler = self._webhook_handlers[name]()
-        await handler.unsubscribe(subscription_data, context)
-
-    async def handle_webhook_event(self,
-                                 name: str,
-                                 event: Dict[str, Any],
-                                 context: ExecutionContext) -> Dict[str, Any]:
-        """Handle an incoming webhook event
-        
-        Args:
-            name: Name of the webhook trigger to handle
-            event: Incoming webhook event
-            context: Execution context
-            
-        Returns:
-            Event result
-            
-        Raises:
-            ValidationError: If webhook trigger is not registered
-        """
-        if name not in self._webhook_handlers:
-            raise ValidationError(f"Webhook trigger '{name}' not registered")
-
-        # Validate event type
-        trigger_config = self.config.webhook_triggers[name]
-        event_type = event.get("type")
-        if event_type not in trigger_config.events:
-            raise ValidationError(
-                f"Received unexpected event type '{event_type}' for trigger '{name}'")
-
-        # Create handler instance and process event
-        handler = self._webhook_handlers[name]()
-        result = await handler.handle(event, context)
-
-        # Validate result against output schema
-        # if trigger_config.output_schema:
-        #   self._validate_schema(result, trigger_config.output_schema)
-
-        return result

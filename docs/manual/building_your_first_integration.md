@@ -41,7 +41,7 @@ cd my-integration
 
 The current process of installing `autohive_integration_sdk` requires installing the package from the PyPi test environment. Because `autohive_integration_sdk` has internal dependencies on libraries that are not on PyPi's test environment, main PyPi has to be added as an extra platform. In your new directory, run:
 
-`pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ autohive-integrations-sdk==0.0.6 --target=dependencies` 
+`pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ autohive-integrations-sdk==0.1.0 --target=dependencies` 
 
 Replace the version `0.0.6` with what is currently the latest.
 
@@ -427,5 +427,13 @@ async with ExecutionContext(auth=auth) as context:
         print(f"Error testing call_api: {e.message}")
     ...
 ```
+
+The actual api-fetch sample integration demonstrates a call to a customiseable URL in three variations:
+
+- No Auth
+- HTTP BASIC Auth
+- API Key as Bearer Token
+
+If you spin up a local HTTP server as shown above, you should be able to inspect different headers and bodies being sent from the integration. The `config.json` of the api-fetch sample integration requires the result to a JSON object containing a `data` object. 
 
 We will provide additional samples and updates to this SDK over time.

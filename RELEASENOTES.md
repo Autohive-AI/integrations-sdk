@@ -1,5 +1,8 @@
 # Release Notes
 
+## 0.1.0
+- Cleanup, samples and documentation improvements
+
 ## 0.0.6
 - Module cleanup, move dependencies into SDK
 

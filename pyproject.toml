@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autohive_integrations_sdk"
-version = "0.0.5"
+version = "0.0.6"
 authors = [
   { name="Hamish Taylor", email="hamish@autohive.com" },
   { name="Reilly Oldham", email="reilly@autohive.com" },
@@ -24,7 +24,10 @@ classifiers = [
 ]
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
-
+dependencies = [
+    "aiohttp", 
+    "jsonschema"
+]
 [project.urls]
 Homepage = "https://github.com/Autohive-AI/integrations-sdk"
 Issues = "https://github.com/Autohive-AI/integrations-sdk/issues"

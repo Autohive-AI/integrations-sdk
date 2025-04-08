@@ -1,5 +1,8 @@
 # Release Notes
 
+## 0.1.1
+- Fix for dependency issue manifesting on beta/production
+
 ## 0.1.0
 - Cleanup, samples and documentation improvements
 

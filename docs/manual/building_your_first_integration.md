@@ -39,11 +39,11 @@ cd my-integration
 
 #### Install autohive_integrations_sdk 
 
-The current process of installing `autohive_integration_sdk` requires installing the package from the PyPi test environment. Because `autohive_integration_sdk` has internal dependencies on libraries that are not on PyPi's test environment, main PyPi has to be added as an extra platform. In your new directory, run:
+The current process of installing `autohive_integration_sdk` requires installing the package from the PyPi environment. In your new directory, run:
 
-`pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ autohive-integrations-sdk==0.1.1 --target=dependencies` 
+`pip install autohive-integrations-sdk==0.1.2 --target=dependencies` 
 
-Replace the version `0.1.1` with what is currently the latest.
+Replace the version `0.1.2` with what is currently the latest.
 
 This command should create a `dependencies` subdirectory in `my-integration` and its output would look similar to:
 

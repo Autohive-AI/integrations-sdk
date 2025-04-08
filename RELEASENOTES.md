@@ -1,5 +1,8 @@
 # Release Notes
 
+## 0.1.2
+- README cosmetics
+
 ## 0.1.1
 - Fix for dependency issue manifesting on beta/production
 

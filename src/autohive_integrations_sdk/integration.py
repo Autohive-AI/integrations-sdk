@@ -580,4 +580,8 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         raygun_client.send_exception(exc_info=(exc_type, exc_value, exc_traceback),tags=['excepthook'])         
     sys.__excepthook__(exc_type, exc_value, exc_traceback)
 
-sys.excepthook = handle_exception
+def initialize_exception_handler():
+    """Initialize the custom exception handler."""
+    sys.excepthook = handle_exception
+
+initialize_exception_handler()

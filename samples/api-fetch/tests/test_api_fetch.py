@@ -37,19 +37,22 @@ async def test_api_fetch():
             result = await api_fetch.execute_action("call_api", inputs, context)
             print("Result from call_api in test_api_fetch.py:", result, "\n")
         except Exception as e:
-            print(f"Error testing call_api: {e.message}")
+            print(f"Error testing call_api: {str(e)}")
+            raise e
 
         try:
             result = await api_fetch.execute_action("call_api_un_pw", inputs, context)
             print("Result from call_api_un_pw in test_api_fetch.py:", result, "\n")
         except Exception as e:
-            print(f"Error testing call_api_un_pw: {e.message}")
+            print(f"Error testing call_api_un_pw: {str(e)}")
+            raise e
 
         try:
             result = await api_fetch.execute_action("call_api_header", inputs, context)
             print("Result from call_api_header in test_api_fetch.py:", result, "\n")
         except Exception as e:
-            print(f"Error testing call_api_header: {e.message}")
+            print(f"Error testing call_api_header: {str(e)}")
+            raise e
 
 async def main():
     """Runs the test suite for the API Fetch integration."""

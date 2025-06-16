@@ -27,6 +27,7 @@ license-files = ["LICEN[CS]E*"]
 dependencies = [
     "aiohttp", 
     "jsonschema==4.17.3"
+    "raygun4py"
 ]
 [project.urls]
 Homepage = "https://github.com/Autohive-AI/integrations-sdk"

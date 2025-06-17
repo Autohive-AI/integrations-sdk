@@ -8,6 +8,7 @@ import json
 import json as jsonX  # Keep alias to avoid conflict with 'json' parameter in fetch
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union, Type, TypeVar, Generic, ClassVar
 from urllib.parse import urlencode
@@ -15,6 +16,8 @@ from urllib.parse import urlencode
 # Third-Party Imports
 import aiohttp
 from jsonschema import validate, Draft7Validator
+from raygun4py import raygunprovider
+
 
 # ---- Type Definitions ----
 T = TypeVar('T')
@@ -270,6 +273,7 @@ class ExecutionContext:
         except RateLimitError:
             raise
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            # Don't want to send this to Raygun here because this will be retried.
             print(f"Error encountered: {e}. Retry count: {retry_count}. Backing off.")
             if retry_count < self.config["max_retries"]:
                 await asyncio.sleep(2 ** retry_count)  # Exponential backoff
@@ -564,3 +568,20 @@ class Integration:
                 raise ValidationError(e.message, e.schema, e.instance)
             
         return records
+
+# ---- Raygun Crash Reporting ----
+RAYGUN_API_KEY = os.environ.get("RAYGUN_API_KEY")
+raygun_client = None
+if RAYGUN_API_KEY:
+    raygun_client = raygunprovider.RaygunSender(RAYGUN_API_KEY, config={'enforce_payload_size_limit': False})
+   
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if raygun_client:  
+        raygun_client.send_exception(exc_info=(exc_type, exc_value, exc_traceback),tags=['excepthook'])         
+    sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+def initialize_exception_handler():
+    """Initialize the custom exception handler."""
+    sys.excepthook = handle_exception
+
+initialize_exception_handler()

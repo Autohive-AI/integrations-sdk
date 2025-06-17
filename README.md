@@ -22,3 +22,12 @@ The [samples directory](https://github.com/Autohive-AI/integrations-sdk/tree/mas
 
 [Release Notes](https://github.com/Autohive-AI/integrations-sdk/blob/master/RELEASENOTES.md)
 
+## Error Reporting
+
+The SDK includes integration with Raygun4Py for error reporting and crash tracking. To enable error reporting:
+
+1. Set the `RAYGUN_API_KEY` environment variable with your Raygun API key
+2. The SDK will automatically send exception reports to Raygun when errors occur
+
+The setup for error reporting will be done automatically for you by the Autohive application and helps us with monitoring and debugging integration issues in production environments. 
+

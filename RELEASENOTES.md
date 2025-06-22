@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.1.3
+
+- Added Raygun integration for internal crash reporting
+
 ## 0.1.2
 - README cosmetics
 

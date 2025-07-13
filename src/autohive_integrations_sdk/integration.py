@@ -573,7 +573,7 @@ class Integration:
 RAYGUN_API_KEY = os.environ.get("RAYGUN_API_KEY")
 raygun_client = None
 if RAYGUN_API_KEY:
-    raygun_client = raygunprovider.RaygunSender(RAYGUN_API_KEY, config={'enforce_payload_size_limit': False})
+    raygun_client = raygunprovider.RaygunSender(RAYGUN_API_KEY)
    
 def handle_exception(exc_type, exc_value, exc_traceback):
     if raygun_client:  

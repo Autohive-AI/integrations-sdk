@@ -595,14 +595,16 @@ class Integration:
         result = await handler.execute(inputs, context)
 
         # Validate output if schema is defined
+        # If result is ActionResult, validate the data inside it; otherwise validate result directly
+        data_to_validate = result.data if isinstance(result, ActionResult) else result
         validator = Draft7Validator(action_config.output_schema)
-        errors = sorted(validator.iter_errors(result), key=lambda e: e.path)
+        errors = sorted(validator.iter_errors(data_to_validate), key=lambda e: e.path)
         if errors:
             message = ""
             for error in errors:
                 message += f"{list(error.schema_path)}, {error.message},\n "
-            raise ValidationError(message, action_config.output_schema, result)
-     
+            raise ValidationError(message, action_config.output_schema, data_to_validate)
+
         return result
 
     async def execute_polling_trigger(self,

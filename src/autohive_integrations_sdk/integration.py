@@ -65,6 +65,52 @@ class RateLimitError(HTTPError):
         """Retry after"""
         super().__init__(*args, **kwargs)
 
+# ---- Result Classes ----
+@dataclass
+class ActionResult:
+    """Result returned by action handlers.
+
+    This class encapsulates the data returned by an action along with optional
+    billing information for cost tracking.
+
+    Args:
+        data: The actual result data from the action
+        cost_usd: Optional USD cost for billing purposes
+        cost_metadata: Optional metadata about the cost (e.g., units, breakdown)
+
+    Example:
+        ```python
+        return ActionResult(
+            data={"message": "Success", "result": 42},
+            cost_usd=0.05,
+            cost_metadata={"tokens": 1000, "model": "gpt-4"}
+        )
+        ```
+    """
+    data: Any
+    cost_usd: Optional[float] = None
+    cost_metadata: Optional[Dict[str, Any]] = None
+
+@dataclass
+class IntegrationResult:
+    """Result format sent from lambda wrapper to backend.
+
+    This class represents the standardized format that the lambda wrapper
+    sends to the Autohive backend, including SDK version and optional billing.
+
+    Args:
+        version: SDK version (auto-populated)
+        data: The result data
+        billing: Optional billing information with cost_usd and cost_metadata
+
+    Note:
+        This type is primarily used internally by the lambda wrapper.
+        Integration developers should use ActionResult instead.
+    """
+    version: str
+    data: Any
+    billing: Optional[Dict[str, Any]] = None
+
 # ---- Configuration Classes ----
 @dataclass
 class ConnectedAccountInfo:

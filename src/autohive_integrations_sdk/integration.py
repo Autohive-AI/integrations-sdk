@@ -100,6 +100,7 @@ class IntegrationResult:
 
     Args:
         version: SDK version (auto-populated)
+        type: Type of result payload (e.g., "action", "connected_account")
         data: The result data
         billing: Optional billing information with cost_usd and cost_metadata
 
@@ -108,6 +109,7 @@ class IntegrationResult:
         Integration developers should use ActionResult instead.
     """
     version: str
+    type: str
     data: Any
     billing: Optional[Dict[str, Any]] = None
 

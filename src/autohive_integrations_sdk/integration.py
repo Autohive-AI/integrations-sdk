@@ -65,6 +65,54 @@ class RateLimitError(HTTPError):
         """Retry after"""
         super().__init__(*args, **kwargs)
 
+# ---- Result Classes ----
+@dataclass
+class ActionResult:
+    """Result returned by action handlers.
+
+    This class encapsulates the data returned by an action along with optional
+    billing information for cost tracking.
+
+    Args:
+        data: The actual result data from the action
+        cost_usd: Optional USD cost for billing purposes
+        cost_metadata: Optional metadata about the cost (e.g., units, breakdown)
+
+    Example:
+        ```python
+        return ActionResult(
+            data={"message": "Success", "result": 42},
+            cost_usd=0.05,
+            cost_metadata={"tokens": 1000, "model": "gpt-4"}
+        )
+        ```
+    """
+    data: Any
+    cost_usd: Optional[float] = None
+    cost_metadata: Optional[Dict[str, Any]] = None
+
+@dataclass
+class IntegrationResult:
+    """Result format sent from lambda wrapper to backend.
+
+    This class represents the standardized format that the lambda wrapper
+    sends to the Autohive backend, including SDK version and optional billing.
+
+    Args:
+        version: SDK version (auto-populated)
+        type: Type of result payload (e.g., "action", "connected_account")
+        data: The result data
+        billing: Optional billing information with cost_usd and cost_metadata
+
+    Note:
+        This type is primarily used internally by the lambda wrapper.
+        Integration developers should use ActionResult instead.
+    """
+    version: str
+    type: str
+    data: Any
+    billing: Optional[Dict[str, Any]] = None
+
 # ---- Configuration Classes ----
 @dataclass
 class ConnectedAccountInfo:
@@ -549,14 +597,16 @@ class Integration:
         result = await handler.execute(inputs, context)
 
         # Validate output if schema is defined
+        # If result is ActionResult, validate the data inside it; otherwise validate result directly
+        data_to_validate = result.data if isinstance(result, ActionResult) else result
         validator = Draft7Validator(action_config.output_schema)
-        errors = sorted(validator.iter_errors(result), key=lambda e: e.path)
+        errors = sorted(validator.iter_errors(data_to_validate), key=lambda e: e.path)
         if errors:
             message = ""
             for error in errors:
                 message += f"{list(error.schema_path)}, {error.message},\n "
-            raise ValidationError(message, action_config.output_schema, result)
-     
+            raise ValidationError(message, action_config.output_schema, data_to_validate)
+
         return result
 
     async def execute_polling_trigger(self,

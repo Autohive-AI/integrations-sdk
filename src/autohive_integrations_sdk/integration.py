@@ -67,6 +67,17 @@ class RateLimitError(HTTPError):
 
 # ---- Configuration Classes ----
 @dataclass
+class ConnectedAccountInfo:
+    """Information about a connected account from an external service"""
+    email: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    username: Optional[str] = None
+    user_id: Optional[str] = None
+    avatar_url: Optional[str] = None
+    organization: Optional[str] = None
+
+@dataclass
 class Parameter:
     """Definition of a parameter"""
     name: str
@@ -117,6 +128,18 @@ class PollingTriggerHandler(ABC):
     @abstractmethod
     async def poll(self, inputs: Dict[str, Any], last_poll_ts: Optional[str], context: 'ExecutionContext') -> List[Dict[str, Any]]:
         """Execute the polling trigger"""
+        pass
+
+class ConnectedAccountHandler(ABC):
+    """Base class for connected account handlers"""
+    @abstractmethod
+    async def get_account_info(self, context: 'ExecutionContext') -> ConnectedAccountInfo:
+        """Get connected account information
+        
+        Returns:
+            ConnectedAccountInfo with optional fields: email, first_name, last_name, 
+            username, user_id, avatar_url, organization
+        """
         pass
 
 # ---- Core SDK Classes ----
@@ -312,6 +335,8 @@ class Integration:
         """Action handlers"""
         self._polling_handlers: Dict[str, Type[PollingTriggerHandler]] = {}
         """Polling handlers"""
+        self._connected_account_handler: Optional[Type[ConnectedAccountHandler]] = None
+        """Connected account handler"""
 
     @classmethod
     def load(cls, config_path: Union[str, Path] = None) -> 'Integration':
@@ -459,6 +484,26 @@ class Integration:
             return handler_class
         return decorator
 
+    def connected_account(self):
+        """Decorator to register a connected account handler
+        
+        Returns:
+            Decorator function
+
+        Example:
+            ```python
+            @integration.connected_account()
+            class MyConnectedAccountHandler(ConnectedAccountHandler):
+                async def get_account_info(self, context):
+                    # Implementation
+                    return {"email": "user@example.com", "name": "John Doe"}
+            ```
+        """
+        def decorator(handler_class: Type[ConnectedAccountHandler]):
+            self._connected_account_handler = handler_class
+            return handler_class
+        return decorator
+
     async def execute_action(self,
                            name: str,
                            inputs: Dict[str, Any],
@@ -568,6 +613,42 @@ class Integration:
                 raise ValidationError(e.message, e.schema, e.instance)
             
         return records
+
+    async def get_connected_account(self, context: ExecutionContext) -> ConnectedAccountInfo:
+        """Get connected account information
+        
+        Args:
+            context: Execution context
+            
+        Returns:
+            ConnectedAccountInfo containing optional fields: email, first_name, last_name,
+            username, user_id, avatar_url, organization
+            
+        Raises:
+            ValidationError: If no connected account handler is registered or auth is invalid
+        """
+        if not self._connected_account_handler:
+            raise ValidationError("No connected account handler registered")
+
+        if "fields" in self.config.auth:
+            auth_config = self.config.auth["fields"]
+            validator = Draft7Validator(auth_config)
+            errors = sorted(validator.iter_errors(context.auth), key=lambda e: e.path)
+            if errors:
+                message = ""
+                for error in errors:
+                    message += f"{list(error.schema_path)}, {error.message},\n "
+                raise ValidationError(message, auth_config, context.auth)
+
+        handler = self._connected_account_handler()
+        account_info = await handler.get_account_info(context)
+        
+        if not isinstance(account_info, ConnectedAccountInfo):
+            raise ValidationError(
+                f"Connected account handler must return ConnectedAccountInfo, got {type(account_info).__name__}"
+            )
+        
+        return account_info
 
 # ---- Raygun Crash Reporting ----
 RAYGUN_API_KEY = os.environ.get("RAYGUN_API_KEY")

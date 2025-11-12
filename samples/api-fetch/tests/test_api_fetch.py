@@ -34,24 +34,57 @@ async def test_api_fetch():
         }
 
         try:
+            # execute_action returns IntegrationResult with structure:
+            # IntegrationResult(version=..., type='action', result={'data': ..., 'billing': ...})
             result = await api_fetch.execute_action("call_api", inputs, context)
-            print("Result from call_api in test_api_fetch.py:", result, "\n")
+            print("Result from call_api in test_api_fetch.py:")
+            print(f"  Data: {result.result['data']}")
+            print(f"  Billing: {result.result['billing']}\n")
         except Exception as e:
             print(f"Error testing call_api: {str(e)}")
             raise e
 
         try:
             result = await api_fetch.execute_action("call_api_un_pw", inputs, context)
-            print("Result from call_api_un_pw in test_api_fetch.py:", result, "\n")
+            print("Result from call_api_un_pw in test_api_fetch.py:")
+            print(f"  Data: {result.result['data']}")
+            print(f"  Billing: {result.result['billing']}\n")
         except Exception as e:
             print(f"Error testing call_api_un_pw: {str(e)}")
             raise e
 
         try:
             result = await api_fetch.execute_action("call_api_header", inputs, context)
-            print("Result from call_api_header in test_api_fetch.py:", result, "\n")
+            print("Result from call_api_header in test_api_fetch.py:")
+            print(f"  Data: {result.result['data']}")
+            print(f"  Billing: {result.result['billing']}\n")
         except Exception as e:
             print(f"Error testing call_api_header: {str(e)}")
+            raise e
+
+async def test_connected_account():
+    """
+    Tests the connected account handler in the api_fetch integration.
+
+    Verifies that the handler correctly returns account information
+    based on the authentication credentials.
+    """
+    auth = {
+        "user_name": "test_user",
+        "password": "test_password",
+        "api_key": "test_api_key"
+    }
+
+    async with ExecutionContext(auth=auth) as context:
+        try:
+            # get_connected_account returns IntegrationResult with structure:
+            # IntegrationResult(version=..., type='connected_account', result={'data': {...}})
+            result = await api_fetch.get_connected_account(context)
+            print("Connected Account Information:")
+            print(f"  Account Data: {result.result['data']}")
+            print(f"  SDK Version: {result.version}\n")
+        except Exception as e:
+            print(f"Error testing connected account: {str(e)}")
             raise e
 
 async def main():
@@ -60,6 +93,7 @@ async def main():
     print("=============================")
 
     await test_api_fetch()
+    await test_connected_account()
 
 if __name__ == "__main__":
     asyncio.run(main())

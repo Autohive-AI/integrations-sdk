@@ -1,7 +1,7 @@
 # Standard Library Imports
 from abc import ABC, abstractmethod
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import timedelta
 from enum import Enum
 import json
@@ -17,6 +17,9 @@ from urllib.parse import urlencode
 import aiohttp
 from jsonschema import validate, Draft7Validator
 from raygun4py import raygunprovider
+
+# Local Imports
+from autohive_integrations_sdk import __version__
 
 
 # ---- Type Definitions ----
@@ -614,7 +617,6 @@ class Integration:
             billing = {'cost_usd': result.cost_usd}
 
         # Return IntegrationResult with action-specific data structure
-        from . import __version__
         return IntegrationResult(
             version=__version__,
             type='action',
@@ -713,19 +715,9 @@ class Integration:
             )
 
         # Convert ConnectedAccountInfo to dict and remove None values
-        account_data = {
-            'email': account_info.email,
-            'username': account_info.username,
-            'first_name': account_info.first_name,
-            'last_name': account_info.last_name,
-            'avatar_url': account_info.avatar_url,
-            'organization': account_info.organization,
-            'user_id': account_info.user_id
-        }
-        account_data = {k: v for k, v in account_data.items() if v is not None}
+        account_data = {k: v for k, v in asdict(account_info).items() if v is not None}
 
         # Return IntegrationResult with connected_account-specific data structure
-        from . import __version__
         return IntegrationResult(
             version=__version__,
             type='connected_account',

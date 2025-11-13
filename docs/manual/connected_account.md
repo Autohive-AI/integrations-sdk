@@ -37,19 +37,19 @@ To enable connected account support, add the `supports_connected_account` field 
 - **Field**: `supports_connected_account`
 - **Type**: `boolean`
 - **Required**: No (defaults to `false`)
-- **Description**: When `true`, the integration must implement the `get_connected_account()` method
+- **Description**: When `true`, the integration must register a `ConnectedAccountHandler` using the `@integration.connected_account()` decorator
 
 ## Implementation
 
-### The ConnectedAccount Model
+### The ConnectedAccountInfo Model
 
-The SDK provides a `ConnectedAccount` dataclass for returning user information:
+The SDK provides a `ConnectedAccountInfo` dataclass for returning user information:
 
 ```python
-from autohive_integrations_sdk import ConnectedAccount
+from autohive_integrations_sdk import ConnectedAccountInfo
 
 @dataclass
-class ConnectedAccount:
+class ConnectedAccountInfo:
     """Information about the connected account"""
     email: Optional[str] = None
     username: Optional[str] = None
@@ -60,37 +60,40 @@ class ConnectedAccount:
     user_id: Optional[str] = None
 ```
 
-### Implementing get_connected_account()
+### Implementing Connected Account Handler
 
-Add the `get_connected_account()` method to your integration class:
+Register a connected account handler using the `@integration.connected_account()` decorator:
 
 ```python
-from autohive_integrations_sdk import BaseIntegration, ConnectedAccount, ExecutionContext
+from autohive_integrations_sdk import Integration, ConnectedAccountHandler, ConnectedAccountInfo, ExecutionContext
 
-class MyIntegration(BaseIntegration):
-    async def get_connected_account(self, context: ExecutionContext) -> ConnectedAccount:
+integration = Integration.load()
+
+@integration.connected_account()
+class MyConnectedAccountHandler(ConnectedAccountHandler):
+    async def get_account_info(self, context: ExecutionContext) -> ConnectedAccountInfo:
         """
         Returns information about the connected account.
-        
+
         This method is called once when a user authorizes the integration.
         The returned information is cached in the database.
-        
+
         Args:
             context: ExecutionContext containing auth credentials and metadata
-            
+
         Returns:
-            ConnectedAccount with user information
+            ConnectedAccountInfo with user information
         """
         # Get access token from context
         access_token = context.auth.get('access_token')
-        
+
         # Fetch user info from the API
         headers = {"Authorization": f"Bearer {access_token}"}
-        async with self.http_client.get("https://api.example.com/user", headers=headers) as response:
+        async with context.http_client.get("https://api.example.com/user", headers=headers) as response:
             user_data = await response.json()
-        
-        # Return ConnectedAccount with available fields
-        return ConnectedAccount(
+
+        # Return ConnectedAccountInfo with available fields
+        return ConnectedAccountInfo(
             email=user_data.get("email"),
             username=user_data.get("login"),
             first_name=user_data.get("name", "").split()[0] if user_data.get("name") else None,
@@ -106,29 +109,32 @@ class MyIntegration(BaseIntegration):
 Here's a complete example for a GitHub integration:
 
 ```python
-from autohive_integrations_sdk import BaseIntegration, ConnectedAccount, ExecutionContext
+from autohive_integrations_sdk import Integration, ConnectedAccountHandler, ConnectedAccountInfo, ExecutionContext
 
-class GithubIntegration(BaseIntegration):
-    async def get_connected_account(self, context: ExecutionContext) -> ConnectedAccount:
+integration = Integration.load()
+
+@integration.connected_account()
+class GithubConnectedAccountHandler(ConnectedAccountHandler):
+    async def get_account_info(self, context: ExecutionContext) -> ConnectedAccountInfo:
         """Fetch GitHub user information"""
         access_token = context.auth.get('access_token')
-        
+
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Accept": "application/vnd.github.v3+json"
         }
-        
-        async with self.http_client.get("https://api.github.com/user", headers=headers) as response:
+
+        async with context.http_client.get("https://api.github.com/user", headers=headers) as response:
             if response.status != 200:
                 raise Exception(f"Failed to fetch user info: {response.status}")
-            
+
             user_data = await response.json()
-        
+
         # Parse name into first/last
         name = user_data.get("name", "")
         name_parts = name.split(maxsplit=1) if name else []
-        
-        return ConnectedAccount(
+
+        return ConnectedAccountInfo(
             email=user_data.get("email"),
             username=user_data.get("login"),
             first_name=name_parts[0] if len(name_parts) > 0 else None,
@@ -144,26 +150,29 @@ class GithubIntegration(BaseIntegration):
 For OAuth integrations with different API structures:
 
 ```python
-from autohive_integrations_sdk import BaseIntegration, ConnectedAccount, ExecutionContext
+from autohive_integrations_sdk import Integration, ConnectedAccountHandler, ConnectedAccountInfo, ExecutionContext
 
-class LinkedInIntegration(BaseIntegration):
-    async def get_connected_account(self, context: ExecutionContext) -> ConnectedAccount:
+integration = Integration.load()
+
+@integration.connected_account()
+class LinkedInConnectedAccountHandler(ConnectedAccountHandler):
+    async def get_account_info(self, context: ExecutionContext) -> ConnectedAccountInfo:
         """Fetch LinkedIn user information"""
         access_token = context.auth.get('access_token')
-        
+
         headers = {"Authorization": f"Bearer {access_token}"}
-        
+
         # LinkedIn API returns profile info
-        async with self.http_client.get(
+        async with context.http_client.get(
             "https://api.linkedin.com/v2/userinfo",
             headers=headers
         ) as response:
             if response.status != 200:
                 raise Exception(f"Failed to fetch user info: {response.status}")
-            
+
             user_data = await response.json()
-        
-        return ConnectedAccount(
+
+        return ConnectedAccountInfo(
             email=user_data.get("email"),
             first_name=user_data.get("given_name"),
             last_name=user_data.get("family_name"),
@@ -195,7 +204,7 @@ Example displays:
 
 ## When is it Called?
 
-The `get_connected_account()` method is invoked automatically:
+The connected account handler's `get_account_info()` method is invoked automatically:
 
 1. **After OAuth authorization** - When a user completes the OAuth flow
 2. **After custom auth setup** - When custom authentication credentials are saved
@@ -204,7 +213,7 @@ The information is cached in the database and not fetched on every page load, en
 
 ## Error Handling
 
-If `get_connected_account()` raises an exception or returns `None`, the system will:
+If the connected account handler raises an exception or returns `None`, the system will:
 - Log a warning
 - Not cache any account information
 - Fall back to showing basic connection status without account details
@@ -216,7 +225,7 @@ This is best-effort caching - failures won't prevent the integration from workin
 ### Connected account not showing
 
 1. Verify `supports_connected_account: true` is in config.json
-2. Check that `get_connected_account()` is implemented
+2. Check that a `ConnectedAccountHandler` is registered with `@integration.connected_account()`
 3. Look for errors in logs during authorization
 4. Ensure the API endpoint returns valid data
 5. Re-upload the integration after making changes

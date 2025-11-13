@@ -3,6 +3,8 @@
     "version": "1.0.0",
     "description": "A simple integration for testing API calls and authentication.",
     "entry_point": "api_fetch.py",
+    "supports_billing": true,
+    "supports_connected_account": true,
     "auth": {
         "identifier": "api_fetch_authentication",
         "type": "custom",

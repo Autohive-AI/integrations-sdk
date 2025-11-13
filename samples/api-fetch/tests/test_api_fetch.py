@@ -78,10 +78,10 @@ async def test_connected_account():
     async with ExecutionContext(auth=auth) as context:
         try:
             # get_connected_account returns IntegrationResult with structure:
-            # IntegrationResult(version=..., type='connected_account', result={'data': {...}})
+            # IntegrationResult(version=..., type='connected_account', result={...account data...})
             result = await api_fetch.get_connected_account(context)
             print("Connected Account Information:")
-            print(f"  Account Data: {result.result['data']}")
+            print(f"  Account Data: {result.result}")
             print(f"  SDK Version: {result.version}\n")
         except Exception as e:
             print(f"Error testing connected account: {str(e)}")

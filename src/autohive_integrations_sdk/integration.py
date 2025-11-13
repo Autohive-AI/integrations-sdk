@@ -103,7 +103,7 @@ class IntegrationResult:
         type: Type of result payload (e.g., "action", "connected_account")
         result: Polymorphic result data - structure varies by type.
                 For "action": {'data': output, 'billing': billing_info}
-                For "connected_account": {'data': account_info}
+                For "connected_account": account_info (direct dict, no wrapper)
 
     Note:
         This type is returned by Integration methods and serialized by the lambda wrapper.
@@ -717,13 +717,11 @@ class Integration:
         # Convert ConnectedAccountInfo to dict and remove None values
         account_data = {k: v for k, v in asdict(account_info).items() if v is not None}
 
-        # Return IntegrationResult with connected_account-specific data structure
+        # Return IntegrationResult with account data directly (no 'data' wrapper)
         return IntegrationResult(
             version=__version__,
             type='connected_account',
-            result={
-                'data': account_data
-            }
+            result=account_data
         )
 
 # ---- Raygun Crash Reporting ----

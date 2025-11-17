@@ -34,6 +34,12 @@ class AuthType(Enum):
     Basic = "Basic"
     Custom = "Custom"
 
+class ResultType(Enum):
+    """Type of result being returned"""
+    ACTION = "action"
+    CONNECTED_ACCOUNT = "connected_account"
+    ERROR = "error"
+
 # ---- Exceptions ----
 class ValidationError(Exception):
     """Raised when inputs/outputs validation fails"""
@@ -92,29 +98,6 @@ class ActionResult:
     cost_usd: Optional[float] = None
 
 @dataclass
-class IntegrationResult:
-    """Result format sent from lambda wrapper to backend.
-
-    This class represents the standardized format that the lambda wrapper
-    sends to the Autohive backend, including SDK version and type-specific data.
-
-    Args:
-        version: SDK version (auto-populated)
-        type: Type of result payload (e.g., "action", "connected_account")
-        result: Polymorphic result data - structure varies by type.
-                For "action": {'data': output, 'billing': billing_info}
-                For "connected_account": account_info (direct dict, no wrapper)
-
-    Note:
-        This type is returned by Integration methods and serialized by the lambda wrapper.
-        Integration developers should use ActionResult for action handlers.
-    """
-    version: str
-    type: str
-    result: Any
-
-# ---- Configuration Classes ----
-@dataclass
 class ConnectedAccountInfo:
     """Information about a connected account from an external service"""
     email: Optional[str] = None
@@ -124,6 +107,30 @@ class ConnectedAccountInfo:
     user_id: Optional[str] = None
     avatar_url: Optional[str] = None
     organization: Optional[str] = None
+
+@dataclass
+class IntegrationResult:
+    """Result format sent from lambda wrapper to backend.
+
+    This class represents the standardized format that the lambda wrapper
+    sends to the Autohive backend, including SDK version and type-specific data.
+
+    Args:
+        version: SDK version (auto-populated)
+        type: Type of result payload (ResultType enum: ACTION, CONNECTED_ACCOUNT, ERROR)
+        result: The result object - ActionResult for actions or
+                ConnectedAccountInfo for connected accounts.
+                The lambda wrapper serializes these to dicts using asdict().
+
+    Note:
+        This type is returned by Integration methods and serialized by the lambda wrapper.
+        Integration developers should use ActionResult for action handlers.
+    """
+    version: str
+    type: ResultType
+    result: Union[ActionResult, ConnectedAccountInfo]
+
+# ---- Configuration Classes ----
 
 @dataclass
 class Parameter:
@@ -611,19 +618,11 @@ class Integration:
                 message += f"{list(error.schema_path)}, {error.message},\n "
             raise ValidationError(message, action_config.output_schema, result.data)
 
-        # Extract billing information
-        billing = None
-        if result.cost_usd is not None:
-            billing = {'cost_usd': result.cost_usd}
-
-        # Return IntegrationResult with action-specific data structure
+        # Return IntegrationResult with ActionResult directly
         return IntegrationResult(
             version=__version__,
-            type='action',
-            result={
-                'data': result.data,
-                'billing': billing
-            }
+            type=ResultType.ACTION,
+            result=result
         )
 
     async def execute_polling_trigger(self,
@@ -714,14 +713,11 @@ class Integration:
                 f"Connected account handler must return ConnectedAccountInfo, got {type(account_info).__name__}"
             )
 
-        # Convert ConnectedAccountInfo to dict and remove None values
-        account_data = {k: v for k, v in asdict(account_info).items() if v is not None}
-
-        # Return IntegrationResult with account data directly (no 'data' wrapper)
+        # Return IntegrationResult with ConnectedAccountInfo object directly
         return IntegrationResult(
             version=__version__,
-            type='connected_account',
-            result=account_data
+            type=ResultType.CONNECTED_ACCOUNT,
+            result=account_info
         )
 
 # ---- Raygun Crash Reporting ----

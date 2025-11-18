@@ -6,7 +6,8 @@ and calls using header-based authentication (e.g., Bearer tokens).
 """
 # rss-reader.py
 from autohive_integrations_sdk import (
-    Integration, ExecutionContext, ActionHandler
+    Integration, ExecutionContext, ActionHandler, ActionResult,
+    ConnectedAccountHandler, ConnectedAccountInfo
 )
 from typing import Dict, Any
 
@@ -26,10 +27,14 @@ class APIFetchAction(ActionHandler):
 
         # Do the API call here
         response = await context.fetch(url)
-        
+
         print("Response: ", response)
 
-        return response
+        # Return ActionResult with billing information
+        return ActionResult(
+            data=response,
+            cost_usd=0.01  # Example: track $0.01 per call
+        )
 
 
 @api_fetch.action("call_api_un_pw")
@@ -61,10 +66,14 @@ class APIFetchActionBasicAuth(ActionHandler):
 
         # Do the API call here
         response = await context.fetch(sendingUrl)
-    
+
         print("Response: ", response)
 
-        return response
+        # Return ActionResult with billing information
+        return ActionResult(
+            data=response,
+            cost_usd=0.01  # Example: track $0.01 per call
+        )
 
 @api_fetch.action("call_api_header")
 class APIFetchActionHeader(ActionHandler):
@@ -80,7 +89,34 @@ class APIFetchActionHeader(ActionHandler):
 
         # Do the API call here
         response = await context.fetch(url, headers={"Authorization": f"Bearer {api_key}"})
-    
+
         print("Response: ", response)
 
-        return response
+        # Return ActionResult with billing information
+        return ActionResult(
+            data=response,
+            cost_usd=0.01  # Example: track $0.01 per call
+        )
+
+
+# ---- Connected Account Handler ----
+@api_fetch.connected_account()
+class APIFetchConnectedAccountHandler(ConnectedAccountHandler):
+    """
+    Provides information about the connected account.
+
+    For this demo integration, returns static account information based on
+    the username from the auth credentials.
+    """
+    async def get_account_info(self, context: ExecutionContext) -> ConnectedAccountInfo:
+        # In a real integration, you would fetch this from an API
+        # For this demo, we'll return information based on the username
+        username = context.auth.get("user_name", "demo_user")
+
+        return ConnectedAccountInfo(
+            username=username,
+            email=f"{username}@example.com",
+            first_name="Demo",
+            last_name="User",
+            user_id=username
+        )

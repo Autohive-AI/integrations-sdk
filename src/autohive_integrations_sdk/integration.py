@@ -1,7 +1,7 @@
 # Standard Library Imports
 from abc import ABC, abstractmethod
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import timedelta
 from enum import Enum
 import json
@@ -18,6 +18,9 @@ import aiohttp
 from jsonschema import validate, Draft7Validator
 from raygun4py import raygunprovider
 
+# Local Imports
+from autohive_integrations_sdk import __version__
+
 
 # ---- Type Definitions ----
 T = TypeVar('T')
@@ -30,6 +33,12 @@ class AuthType(Enum):
     ApiKey = "ApiKey"
     Basic = "Basic"
     Custom = "Custom"
+
+class ResultType(Enum):
+    """Type of result being returned"""
+    ACTION = "action"
+    CONNECTED_ACCOUNT = "connected_account"
+    ERROR = "error"
 
 # ---- Exceptions ----
 class ValidationError(Exception):
@@ -65,7 +74,29 @@ class RateLimitError(HTTPError):
         """Retry after"""
         super().__init__(*args, **kwargs)
 
-# ---- Configuration Classes ----
+# ---- Result Classes ----
+@dataclass
+class ActionResult:
+    """Result returned by action handlers.
+
+    This class encapsulates the data returned by an action along with optional
+    billing information for cost tracking.
+
+    Args:
+        data: The actual result data from the action
+        cost_usd: Optional USD cost for billing purposes
+
+    Example:
+        ```python
+        return ActionResult(
+            data={"message": "Success", "result": 42},
+            cost_usd=0.05
+        )
+        ```
+    """
+    data: Any
+    cost_usd: Optional[float] = None
+
 @dataclass
 class ConnectedAccountInfo:
     """Information about a connected account from an external service"""
@@ -76,6 +107,30 @@ class ConnectedAccountInfo:
     user_id: Optional[str] = None
     avatar_url: Optional[str] = None
     organization: Optional[str] = None
+
+@dataclass
+class IntegrationResult:
+    """Result format sent from lambda wrapper to backend.
+
+    This class represents the standardized format that the lambda wrapper
+    sends to the Autohive backend, including SDK version and type-specific data.
+
+    Args:
+        version: SDK version (auto-populated)
+        type: Type of result payload (ResultType enum: ACTION, CONNECTED_ACCOUNT, ERROR)
+        result: The result object - ActionResult for actions or
+                ConnectedAccountInfo for connected accounts.
+                The lambda wrapper serializes these to dicts using asdict().
+
+    Note:
+        This type is returned by Integration methods and serialized by the lambda wrapper.
+        Integration developers should use ActionResult for action handlers.
+    """
+    version: str
+    type: ResultType
+    result: Union[ActionResult, ConnectedAccountInfo]
+
+# ---- Configuration Classes ----
 
 @dataclass
 class Parameter:
@@ -507,19 +562,19 @@ class Integration:
     async def execute_action(self,
                            name: str,
                            inputs: Dict[str, Any],
-                           context: ExecutionContext) -> Any:
+                           context: ExecutionContext) -> IntegrationResult:
         """Execute a registered action.
-        
+
         Args:
             name: Name of the action to execute
             inputs: Action inputs
             context: Execution context
-            
+
         Returns:
-            Action result
-            
+            IntegrationResult with action data and optional billing information
+
         Raises:
-            ValidationError: If inputs or outputs don't match schema
+            ValidationError: If inputs or outputs don't match schema, or if handler doesn't return ActionResult
         """
         if name not in self._action_handlers:
             raise ValidationError(f"Action '{name}' not registered")
@@ -533,7 +588,7 @@ class Integration:
             for error in errors:
                 message += f"{list(error.schema_path)}, {error.message},\n "
             raise ValidationError(message, action_config.input_schema, inputs)
-         
+
         if "fields" in self.config.auth:
             auth_config = self.config.auth["fields"]
             validator = Draft7Validator(auth_config)
@@ -548,16 +603,27 @@ class Integration:
         handler = self._action_handlers[name]()
         result = await handler.execute(inputs, context)
 
-        # Validate output if schema is defined
+        # Validate that result is ActionResult
+        if not isinstance(result, ActionResult):
+            raise ValidationError(
+                f"Action handler '{name}' must return ActionResult, got {type(result).__name__}"
+            )
+
+        # Validate output schema against the data inside ActionResult
         validator = Draft7Validator(action_config.output_schema)
-        errors = sorted(validator.iter_errors(result), key=lambda e: e.path)
+        errors = sorted(validator.iter_errors(result.data), key=lambda e: e.path)
         if errors:
             message = ""
             for error in errors:
                 message += f"{list(error.schema_path)}, {error.message},\n "
-            raise ValidationError(message, action_config.output_schema, result)
-     
-        return result
+            raise ValidationError(message, action_config.output_schema, result.data)
+
+        # Return IntegrationResult with ActionResult directly
+        return IntegrationResult(
+            version=__version__,
+            type=ResultType.ACTION,
+            result=result
+        )
 
     async def execute_polling_trigger(self,
                                     name: str,
@@ -614,16 +680,15 @@ class Integration:
             
         return records
 
-    async def get_connected_account(self, context: ExecutionContext) -> ConnectedAccountInfo:
+    async def get_connected_account(self, context: ExecutionContext) -> IntegrationResult:
         """Get connected account information
-        
+
         Args:
             context: Execution context
-            
+
         Returns:
-            ConnectedAccountInfo containing optional fields: email, first_name, last_name,
-            username, user_id, avatar_url, organization
-            
+            IntegrationResult containing connected account data
+
         Raises:
             ValidationError: If no connected account handler is registered or auth is invalid
         """
@@ -642,13 +707,18 @@ class Integration:
 
         handler = self._connected_account_handler()
         account_info = await handler.get_account_info(context)
-        
+
         if not isinstance(account_info, ConnectedAccountInfo):
             raise ValidationError(
                 f"Connected account handler must return ConnectedAccountInfo, got {type(account_info).__name__}"
             )
-        
-        return account_info
+
+        # Return IntegrationResult with ConnectedAccountInfo object directly
+        return IntegrationResult(
+            version=__version__,
+            type=ResultType.CONNECTED_ACCOUNT,
+            result=account_info
+        )
 
 # ---- Raygun Crash Reporting ----
 RAYGUN_API_KEY = os.environ.get("RAYGUN_API_KEY")

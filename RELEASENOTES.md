@@ -1,5 +1,9 @@
 # Release Notes
 
+## 1.0.1
+
+- Missed version update in init file.
+
 ## 1.0.0 
 - Add ActionResult and IntegrationResult classes to provide standardized result handling with optional billing/cost tracking capabilities for the integrations SDK
 - Introduce SDK support for connected account information so integrations can expose the authorized user's identity; add documentation and public exports.

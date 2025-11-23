@@ -4,11 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autohive_integrations_sdk"
-version = "0.1.4"
+version = "1.0.0"
 authors = [
   { name="Hamish Taylor", email="hamish@autohive.com" },
   { name="Reilly Oldham", email="reilly@autohive.com" },
   { name="Kai Koenig", email="kai@autohive.com" },
+  { name="Ninos Awas", email="ninos@raygun.com" }
 ]
 description = "Integrations SDK for Autohive"
 readme = "README.md"
@@ -16,7 +17,7 @@ requires-python = ">=3.13"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",

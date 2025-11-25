@@ -1,5 +1,8 @@
 # Release Notes
 
+## 1.0.2
+- Removed raygun4py dependency
+
 ## 1.0.1
 
 - Missed version update in init file.

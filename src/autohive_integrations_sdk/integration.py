@@ -16,7 +16,7 @@ from urllib.parse import urlencode
 # Third-Party Imports
 import aiohttp
 from jsonschema import validate, Draft7Validator
-from raygun4py import raygunprovider
+
 
 # Local Imports
 from autohive_integrations_sdk import __version__
@@ -720,19 +720,3 @@ class Integration:
             result=account_info
         )
 
-# ---- Raygun Crash Reporting ----
-RAYGUN_API_KEY = os.environ.get("RAYGUN_API_KEY")
-raygun_client = None
-if RAYGUN_API_KEY:
-    raygun_client = raygunprovider.RaygunSender(RAYGUN_API_KEY)
-   
-def handle_exception(exc_type, exc_value, exc_traceback):
-    if raygun_client:  
-        raygun_client.send_exception(exc_info=(exc_type, exc_value, exc_traceback),tags=['excepthook'])         
-    sys.__excepthook__(exc_type, exc_value, exc_traceback)
-
-def initialize_exception_handler():
-    """Initialize the custom exception handler."""
-    sys.excepthook = handle_exception
-
-initialize_exception_handler()

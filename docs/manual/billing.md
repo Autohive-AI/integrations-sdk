@@ -44,7 +44,7 @@ class ActionResult:
 
 ### Returning Costs from Action Handlers
 
-When your integration has `supports_billing: true`, your action handlers should return `ActionResult` instead of a plain dictionary. Include the `cost_usd` field to report the cost of each execution:
+When your integration has `supports_billing: true`, your action handlers should return `ActionResult` with the `cost_usd` field to report the cost of each execution:
 
 ```python
 from autohive_integrations_sdk import Integration, ExecutionContext, ActionHandler, ActionResult
@@ -99,19 +99,9 @@ class GenerateContentAction(ActionHandler):
             cost_usd=cost
         )
 ```
-
-## How It Works
-
-When an integration action executes, the platform processes billing as follows:
-
-1. The action handler returns an `ActionResult` with an optional `cost_usd`
-2. If `cost_usd` is present, the platform creates an `IntegrationCostBillableUnit` with that amount
-3. This cost is combined with the infrastructure compute cost (Lambda execution time and memory) into a composite billable unit
-4. The total cost is recorded against the workspace's usage
-
 ## Best Practices
 
-1. **Always return `ActionResult`** when `supports_billing` is `true` - the SDK will raise a `ValidationError` if your handler returns a plain dictionary instead
+1. **Always return `ActionResult`** when `supports_billing` is `true`
 2. **Be accurate with costs** - report the actual cost incurred by the third-party API call, not an estimate
 3. **Use `0.0` for free operations** - if an action doesn't cost anything, explicitly return `cost_usd=0.0` to signal that billing is working correctly
 4. **Calculate dynamically when possible** - if the API returns usage data (e.g., tokens consumed), use it to compute the cost rather than using a fixed value
@@ -119,11 +109,9 @@ When an integration action executes, the platform processes billing as follows:
 
 ## Migration Notes
 
-Existing integrations without `supports_billing` continue working without changes. The field defaults to `false`, and action handlers can continue returning plain dictionaries.
-
 To add billing to an existing integration:
 
 1. Add `"supports_billing": true` to `config.json`
-2. Update action handlers to return `ActionResult` instead of plain dictionaries
+2. Update action handlers to return `ActionResult` with `cost_usd`
 3. Import `ActionResult` from the SDK: `from autohive_integrations_sdk import ActionResult`
 4. Re-upload the integration

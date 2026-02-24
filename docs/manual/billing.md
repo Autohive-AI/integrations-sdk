@@ -34,13 +34,11 @@ The SDK provides the `ActionResult` dataclass for returning data along with opti
 
 ```python
 from autohive_integrations_sdk import ActionResult
-
-@dataclass
-class ActionResult:
-    """Result returned by action handlers."""
-    data: Any           # The actual result data from the action
-    cost_usd: float     # Optional USD cost for billing purposes (default: None)
 ```
+
+`ActionResult` accepts two fields:
+- **`data`** — the actual result data from the action
+- **`cost_usd`** — optional USD cost for billing purposes (defaults to `None`)
 
 ### Returning Costs from Action Handlers
 

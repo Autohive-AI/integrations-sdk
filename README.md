@@ -12,7 +12,7 @@ The SDK code lives in [src/autohive_integrations_sdk](https://github.com/Autohiv
 
 Basic API docs can be found in [docs/apidocs](https://github.com/Autohive-AI/integrations-sdk/tree/master/docs/apidocs).
 
-More verbose documentation lives in [docs/manual](https://github.com/Autohive-AI/integrations-sdk/tree/master/docs/manual), including a [tutorial to build your first integration](docs/manual/building_your_first_integration.md).
+More verbose documentation lives in [docs/manual](https://github.com/Autohive-AI/integrations-sdk/tree/master/docs/manual), including a [tutorial to build your first integration](docs/manual/building_your_first_integration.md) and a guide to [billing and cost tracking](docs/manual/billing.md).
 
 ### Samples
 

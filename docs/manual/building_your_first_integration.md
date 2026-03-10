@@ -205,6 +205,26 @@ This integration handler will take a URL and an API key and call the URL with th
 
 Inside of an `ActionHandler`-based handler you will need to provide an `execute` method that accepts a `Dict` of input variables (matching what's defined in your `config.json`) and an `ExecutionContext` from the SDK. The context will provide network functionality via its `fetch` method and `context.auth` provides information for the purpose of integration-defined auth in AutoHive.
 
+#### Returning errors from actions
+
+Action handlers normally return an `ActionResult` whose `data` is validated against the action's `output_schema`. When your action encounters an expected error condition (e.g. a resource not found, an API quota exceeded), you can return an `ActionError` instead. This bypasses output schema validation and returns the error message to the caller:
+
+```python
+from autohive_integrations_sdk import ActionError, HTTPError
+
+@my_integration.action("my_action_handler")
+class MyActionHandler(ActionHandler):
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext):
+        try:
+            response = await context.fetch(url)
+        except HTTPError as e:
+            return ActionError(message=f"API call failed: {e.message}")
+
+        return ActionResult(data=response)
+```
+
+Use `ActionError` for expected, application-level failures. For unexpected infrastructure errors, let exceptions propagate normally.
+
 To get the API key passed into your `ExecutionContext`, the `config.json`'s `auth` section would have to be amended by adding:
 
 ```json

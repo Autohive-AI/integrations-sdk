@@ -6,8 +6,8 @@ and calls using header-based authentication (e.g., Bearer tokens).
 """
 # rss-reader.py
 from autohive_integrations_sdk import (
-    Integration, ExecutionContext, ActionHandler, ActionResult,
-    ConnectedAccountHandler, ConnectedAccountInfo
+    Integration, ExecutionContext, ActionHandler, ActionResult, ActionError,
+    ConnectedAccountHandler, ConnectedAccountInfo, HTTPError
 )
 from typing import Dict, Any
 
@@ -26,7 +26,11 @@ class APIFetchAction(ActionHandler):
         url = inputs["url"]
 
         # Do the API call here
-        response = await context.fetch(url)
+        try:
+            response = await context.fetch(url)
+        except HTTPError as e:
+            # Return ActionError for expected API failures
+            return ActionError(message=f"API call failed with status {e.status}: {e.message}")
 
         print("Response: ", response)
 

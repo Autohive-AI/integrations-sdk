@@ -98,6 +98,23 @@ class ActionResult:
     cost_usd: Optional[float] = None
 
 @dataclass
+class ActionError:
+    """Error result returned by action handlers for expected/application-level errors.
+
+    When returned from an action handler, output schema validation is skipped
+    and the error is returned to the caller as a ResultType.ERROR result.
+
+    Args:
+        message: Human-readable error message
+
+    Example:
+        ```python
+        return ActionError(message="User not found")
+        ```
+    """
+    message: str
+
+@dataclass
 class ConnectedAccountInfo:
     """Information about a connected account from an external service"""
     email: Optional[str] = None
@@ -118,17 +135,19 @@ class IntegrationResult:
     Args:
         version: SDK version (auto-populated)
         type: Type of result payload (ResultType enum: ACTION, CONNECTED_ACCOUNT, ERROR)
-        result: The result object - ActionResult for actions or
-                ConnectedAccountInfo for connected accounts.
+        result: The result object - ActionResult for actions, ActionError for
+                application-level action errors, or ConnectedAccountInfo for
+                connected accounts.
                 The lambda wrapper serializes these to dicts using asdict().
 
     Note:
         This type is returned by Integration methods and serialized by the lambda wrapper.
-        Integration developers should use ActionResult for action handlers.
+        Integration developers should use ActionResult for action handlers and
+        ActionError for expected error conditions.
     """
     version: str
     type: ResultType
-    result: Union[ActionResult, ConnectedAccountInfo]
+    result: Union[ActionResult, ActionError, ConnectedAccountInfo]
 
 # ---- Configuration Classes ----
 
@@ -571,10 +590,12 @@ class Integration:
             context: Execution context
 
         Returns:
-            IntegrationResult with action data and optional billing information
+            IntegrationResult with action data (ResultType.ACTION) or
+            error information (ResultType.ERROR) if the handler returned ActionError
 
         Raises:
-            ValidationError: If inputs or outputs don't match schema, or if handler doesn't return ActionResult
+            ValidationError: If inputs or outputs don't match schema, or if handler
+                doesn't return ActionResult or ActionError
         """
         if name not in self._action_handlers:
             raise ValidationError(f"Action '{name}' not registered")
@@ -603,10 +624,18 @@ class Integration:
         handler = self._action_handlers[name]()
         result = await handler.execute(inputs, context)
 
+        # Handle ActionError - skip output schema validation
+        if isinstance(result, ActionError):
+            return IntegrationResult(
+                version=__version__,
+                type=ResultType.ERROR,
+                result=result
+            )
+
         # Validate that result is ActionResult
         if not isinstance(result, ActionResult):
             raise ValidationError(
-                f"Action handler '{name}' must return ActionResult, got {type(result).__name__}"
+                f"Action handler '{name}' must return ActionResult or ActionError, got {type(result).__name__}"
             )
 
         # Validate output schema against the data inside ActionResult

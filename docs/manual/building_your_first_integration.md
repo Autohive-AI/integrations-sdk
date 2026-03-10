@@ -307,6 +307,29 @@ if email:
     body["email"] = email
 ```
 
+### Returning Errors from Actions
+
+Action handlers normally return an `ActionResult` whose `data` is validated against the action's `output_schema`. When your action encounters an expected error condition (e.g. a resource not found, an API quota exceeded), you can return an `ActionError` instead. This bypasses output schema validation and returns the error message to the caller:
+
+```python
+from autohive_integrations_sdk import ActionError, HTTPError
+
+@my_integration.action("my_action_handler")
+class MyActionHandler(ActionHandler):
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext):
+        try:
+            response = await context.fetch(url)
+        except HTTPError as e:
+            return ActionError(
+                message=f"API call failed: {e.message}",
+                cost_usd=0.01  # API call was made, cost was still incurred
+            )
+
+        return ActionResult(data=response)
+```
+
+Use `ActionError` for expected, application-level failures. For unexpected infrastructure errors, let exceptions propagate normally.
+
 ### Handler Class Naming
 
 Use `PascalCase` with an `Action` suffix:

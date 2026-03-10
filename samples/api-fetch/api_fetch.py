@@ -7,7 +7,7 @@ Actions:
 - call_api_header: API call with Bearer token header
 """
 from autohive_integrations_sdk import (
-    Integration, ExecutionContext, ActionHandler, ActionResult
+    Integration, ExecutionContext, ActionHandler, ActionResult, ActionError, HTTPError
 )
 from typing import Dict, Any
 
@@ -20,7 +20,14 @@ class APIFetchAction(ActionHandler):
 
     async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
         url = inputs["url"]
-        response = await context.fetch(url)
+
+        try:
+            response = await context.fetch(url)
+        except HTTPError as e:
+            return ActionError(
+                message=f"API call failed with status {e.status}: {e.message}",
+                cost_usd=0.01
+            )
 
         return ActionResult(
             data=response,

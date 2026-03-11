@@ -139,7 +139,7 @@ Each action in the `actions` object must have:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `description` | Yes | What the action does (minimum 10 characters) |
+| `description` | Yes | What the action does |
 | `input_schema` | Yes | JSON Schema defining accepted inputs |
 | `output_schema` | Yes | JSON Schema defining the response structure |
 | `display_name` | Recommended | Human-readable action name for the UI |
@@ -444,8 +444,8 @@ import actions
 **Action module (`actions/items.py`):**
 
 ```python
-from ..my_integration import my_integration
-from ..helpers import get_headers
+from my_integration import my_integration
+from helpers import get_headers
 from autohive_integrations_sdk import ActionHandler, ActionResult, ExecutionContext
 from typing import Dict, Any
 

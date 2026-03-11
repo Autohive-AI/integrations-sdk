@@ -1,5 +1,7 @@
 # Connected Account Information
 
+> This guide covers connected account display for integrations. For a complete walkthrough of building an integration, see [Building Your First Integration](building_your_first_integration.md).
+
 ## Overview
 
 Integrations can provide connected account information to display which account was used to authorize the integration. This improves transparency and helps users understand which credentials are being used.
@@ -84,20 +86,23 @@ class MyConnectedAccountHandler(ConnectedAccountHandler):
         Returns:
             ConnectedAccountInfo with user information
         """
-        # Get access token from context
-        access_token = context.auth.get('access_token')
-
         # Fetch user info from the API
-        headers = {"Authorization": f"Bearer {access_token}"}
-        async with context.http_client.get("https://api.example.com/user", headers=headers) as response:
-            user_data = await response.json()
+        # For platform OAuth, context.fetch() auto-injects the Authorization header.
+        # For custom auth, pass headers manually: headers={"Authorization": f"Bearer {context.auth['api_key']}"}
+        user_data = await context.fetch(
+            "https://api.example.com/user",
+            method="GET"
+        )
 
         # Return ConnectedAccountInfo with available fields
+        name = user_data.get("name", "")
+        name_parts = name.split(maxsplit=1) if name else []
+
         return ConnectedAccountInfo(
             email=user_data.get("email"),
             username=user_data.get("login"),
-            first_name=user_data.get("name", "").split()[0] if user_data.get("name") else None,
-            last_name=user_data.get("name", "").split()[-1] if user_data.get("name") and " " in user_data.get("name") else None,
+            first_name=name_parts[0] if len(name_parts) > 0 else None,
+            last_name=name_parts[1] if len(name_parts) > 1 else None,
             avatar_url=user_data.get("avatar_url"),
             organization=user_data.get("company"),
             user_id=str(user_data.get("id"))
@@ -117,18 +122,12 @@ integration = Integration.load()
 class GithubConnectedAccountHandler(ConnectedAccountHandler):
     async def get_account_info(self, context: ExecutionContext) -> ConnectedAccountInfo:
         """Fetch GitHub user information"""
-        access_token = context.auth.get('access_token')
-
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Accept": "application/vnd.github.v3+json"
-        }
-
-        async with context.http_client.get("https://api.github.com/user", headers=headers) as response:
-            if response.status != 200:
-                raise Exception(f"Failed to fetch user info: {response.status}")
-
-            user_data = await response.json()
+        # context.fetch() auto-injects the Authorization header for platform OAuth
+        user_data = await context.fetch(
+            "https://api.github.com/user",
+            method="GET",
+            headers={"Accept": "application/vnd.github.v3+json"}
+        )
 
         # Parse name into first/last
         name = user_data.get("name", "")
@@ -158,19 +157,11 @@ integration = Integration.load()
 class LinkedInConnectedAccountHandler(ConnectedAccountHandler):
     async def get_account_info(self, context: ExecutionContext) -> ConnectedAccountInfo:
         """Fetch LinkedIn user information"""
-        access_token = context.auth.get('access_token')
-
-        headers = {"Authorization": f"Bearer {access_token}"}
-
-        # LinkedIn API returns profile info
-        async with context.http_client.get(
+        # context.fetch() auto-injects the Authorization header for platform OAuth
+        user_data = await context.fetch(
             "https://api.linkedin.com/v2/userinfo",
-            headers=headers
-        ) as response:
-            if response.status != 200:
-                raise Exception(f"Failed to fetch user info: {response.status}")
-
-            user_data = await response.json()
+            method="GET"
+        )
 
         return ConnectedAccountInfo(
             email=user_data.get("email"),

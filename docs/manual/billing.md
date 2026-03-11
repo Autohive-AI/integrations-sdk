@@ -1,5 +1,7 @@
 # Billing and Cost Tracking
 
+> This guide covers billing and cost tracking for integrations. For a complete walkthrough of building an integration, see [Building Your First Integration](building_your_first_integration.md).
+
 ## Overview
 
 Integrations can report per-action costs back to AutoHive for billing and usage tracking. This is useful for integrations that call paid third-party APIs where each execution has a measurable cost.
@@ -68,7 +70,7 @@ class CallApiAction(ActionHandler):
 
 - `cost_usd` is a `float` representing the cost in US dollars
 - Set `cost_usd=0.0` for actions that have no cost but still want to participate in billing tracking
-- Omit `cost_usd` (or set to `None`) if billing information is not available for a particular execution
+- Omit `cost_usd` if billing information is not available for a particular execution
 
 ## Example: Paid API Integration
 
@@ -99,7 +101,7 @@ class GenerateContentAction(ActionHandler):
 ```
 ## Best Practices
 
-1. **Always return `ActionResult`** when `supports_billing` is `true`
+1. **Always return `ActionResult`** from action handlers — it is the standard return type regardless of whether billing is enabled
 2. **Be accurate with costs** - report the actual cost incurred by the third-party API call, not an estimate
 3. **Use `0.0` for free operations** - if an action doesn't cost anything, explicitly return `cost_usd=0.0` to signal that billing is working correctly
 4. **Calculate dynamically when possible** - if the API returns usage data (e.g., tokens consumed), use it to compute the cost rather than using a fixed value

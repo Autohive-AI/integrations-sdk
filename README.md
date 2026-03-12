@@ -1,33 +1,36 @@
 # Integrations SDK for Autohive
 
-##  Overview
+## Overview
 
 This is the SDK for building integrations into Autohive's AI agent platform.
 
-### SDK
+## Getting Started
 
-The SDK code lives in [src/autohive_integrations_sdk](https://github.com/Autohive-AI/integrations-sdk/tree/master/src/autohive_integrations_sdk).
+Start with the **[Building Your First Integration](docs/manual/building_your_first_integration.md)** tutorial, or copy the **[starter template](samples/template/)** to hit the ground running.
 
-### Documentation
+## Documentation
 
-Basic API docs can be found in [docs/apidocs](https://github.com/Autohive-AI/integrations-sdk/tree/master/docs/apidocs).
+| Guide | Description |
+|-------|-------------|
+| [Building Your First Integration](docs/manual/building_your_first_integration.md) | End-to-end tutorial covering config, actions, auth, testing |
+| [Integration Structure](docs/manual/integration_structure.md) | Directory layout, `config.json` schema reference, naming conventions |
+| [Patterns & Best Practices](docs/manual/patterns.md) | Pagination, API helpers, multi-field auth |
+| [Billing & Cost Tracking](docs/manual/billing.md) | Reporting per-action costs via `ActionResult.cost_usd` |
+| [Connected Accounts](docs/manual/connected_account.md) | Fetching and displaying external account info |
+| [API Reference](docs/apidocs/) | Generated API docs (pdoc) |
 
-More verbose documentation lives in [docs/manual](https://github.com/Autohive-AI/integrations-sdk/tree/master/docs/manual), including a [tutorial to build your first integration](docs/manual/building_your_first_integration.md) and a guide to [billing and cost tracking](docs/manual/billing.md).
+## Samples
 
-### Samples
+| Sample | Description |
+|--------|-------------|
+| [`samples/template/`](samples/template/) | Clean starter template — copy this to begin a new integration |
+| [`samples/api-fetch/`](samples/api-fetch/) | Working example with unauthenticated, Basic Auth, and Bearer token API calls |
 
-The [samples directory](https://github.com/Autohive-AI/integrations-sdk/tree/master/samples) contains a very basic "API Fetch" integration as a sample starting point.
+## Validation & CI
 
-## Additional information
+Integration validation is handled by the [autohive-integrations-tooling](https://github.com/Autohive-AI/autohive-integrations-tooling) repo. See its README for CI pipeline setup and the integration checklist.
 
-[Release Notes](https://github.com/Autohive-AI/integrations-sdk/blob/master/RELEASENOTES.md)
+## Additional Information
 
-## Error Reporting
-
-The SDK includes integration with Raygun4Py for error reporting and crash tracking. To enable error reporting:
-
-1. Set the `RAYGUN_API_KEY` environment variable with your Raygun API key
-2. The SDK will automatically send exception reports to Raygun when errors occur
-
-The setup for error reporting will be done automatically for you by the Autohive application and helps us with monitoring and debugging integration issues in production environments. 
-
+- [Release Notes](RELEASENOTES.md)
+- SDK source: [`src/autohive_integrations_sdk`](src/autohive_integrations_sdk/)

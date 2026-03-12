@@ -173,7 +173,7 @@ For integrations where users provide their own credentials. Use `title` to label
 
 The `fields` value must be valid JSON Schema. The `format`, `label`, and `help_text` properties are used to render the authentication UI in Autohive.
 
-At runtime, credentials are available via `context.auth` in your action handlers. For custom auth, access fields directly: `context.auth["api_token"]`.
+At runtime, credentials are nested under `context.auth["credentials"]`. For custom auth, access fields like: `context.auth.get("credentials", {}).get("api_token")`.
 
 ### Platform Auth (OAuth2)
 
@@ -394,11 +394,13 @@ if __name__ == "__main__":
     asyncio.run(test_get_items())
 ```
 
-For integrations that require authentication, pass credentials in the `auth` dict:
+For integrations that require authentication, pass credentials nested under `"credentials"`:
 
 ```python
 auth = {
-    "api_token": "your-test-token"
+    "credentials": {
+        "api_token": "your-test-token"
+    }
 }
 async with ExecutionContext(auth=auth) as context:
     result = await my_integration.execute_action("get_items", inputs, context)

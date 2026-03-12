@@ -160,7 +160,7 @@ Each property in `fields.properties` supports:
 | `help_text` | string | Help text shown below the field |
 | `default` | any | Default value |
 
-At runtime, credentials are available via `context.auth`: `context.auth["api_token"]`.
+At runtime, credentials are nested under `context.auth["credentials"]`: `context.auth.get("credentials", {}).get("api_token")`.
 
 #### Platform Auth (OAuth2)
 

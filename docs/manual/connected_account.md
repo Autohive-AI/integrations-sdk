@@ -88,7 +88,7 @@ class MyConnectedAccountHandler(ConnectedAccountHandler):
         """
         # Fetch user info from the API
         # For platform OAuth, context.fetch() auto-injects the Authorization header.
-        # For custom auth, pass headers manually: headers={"Authorization": f"Bearer {context.auth['api_key']}"}
+        # For custom auth, pass headers manually using context.auth.get("credentials", {}).get("api_key")
         user_data = await context.fetch(
             "https://api.example.com/user",
             method="GET"

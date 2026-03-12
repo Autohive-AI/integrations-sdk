@@ -56,7 +56,8 @@ integration = Integration.load()
 class CallApiAction(ActionHandler):
     async def execute(self, inputs: Dict[str, Any], context: ExecutionContext):
         url = inputs["url"]
-        api_key = context.auth["api_key"]
+        credentials = context.auth.get("credentials", {})
+        api_key = credentials.get("api_key", "")
 
         response = await context.fetch(url, headers={"Authorization": f"Bearer {api_key}"})
 
@@ -81,7 +82,8 @@ For integrations calling APIs with per-request pricing, calculate and report the
 class GenerateContentAction(ActionHandler):
     async def execute(self, inputs: Dict[str, Any], context: ExecutionContext):
         prompt = inputs["prompt"]
-        api_key = context.auth["api_key"]
+        credentials = context.auth.get("credentials", {})
+        api_key = credentials.get("api_key", "")
 
         response = await context.fetch(
             "https://api.example.com/generate",

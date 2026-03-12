@@ -394,17 +394,17 @@ if __name__ == "__main__":
     asyncio.run(test_get_items())
 ```
 
-For integrations that require authentication, pass credentials nested under `"credentials"`:
+For integrations that require authentication, pass credentials matching your `auth.fields` schema:
 
 ```python
 auth = {
-    "credentials": {
-        "api_token": "your-test-token"
-    }
+    "api_token": "your-test-token"
 }
 async with ExecutionContext(auth=auth) as context:
     result = await my_integration.execute_action("get_items", inputs, context)
 ```
+
+> **Note:** In production, the platform wraps credentials as `{"auth_type": "...", "credentials": {"api_token": "..."}}`. That's why production action handlers access `context.auth.get("credentials", {}).get("api_token")`. When testing locally with `execute_action`, the SDK validates `context.auth` directly against your `auth.fields` schema, so pass credentials flat.
 
 ## Multi-File Integrations
 

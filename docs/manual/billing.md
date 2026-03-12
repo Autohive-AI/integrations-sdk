@@ -4,7 +4,7 @@
 
 ## Overview
 
-Integrations can report per-action costs back to AutoHive for billing and usage tracking. This is useful for integrations that call paid third-party APIs where each execution has a measurable cost.
+Integrations can report per-action costs back to Autohive for billing and usage tracking. This is useful for integrations that call paid third-party APIs where each execution has a measurable cost.
 
 ## Configuration
 
@@ -54,7 +54,7 @@ integration = Integration.load()
 
 @integration.action("call_api")
 class CallApiAction(ActionHandler):
-    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext):
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
         url = inputs["url"]
         credentials = context.auth.get("credentials", {})
         api_key = credentials.get("api_key", "")
@@ -80,7 +80,7 @@ For integrations calling APIs with per-request pricing, calculate and report the
 ```python
 @integration.action("generate_content")
 class GenerateContentAction(ActionHandler):
-    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext):
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
         prompt = inputs["prompt"]
         credentials = context.auth.get("credentials", {})
         api_key = credentials.get("api_key", "")

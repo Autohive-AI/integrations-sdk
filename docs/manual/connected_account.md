@@ -18,6 +18,7 @@ To enable connected account support, add the `supports_connected_account` field 
 ```json
 {
   "name": "github",
+  "version": "1.0.0",
   "entry_point": "main.py",
   "description": "GitHub integration for repository management",
   "supports_connected_account": true,
@@ -28,7 +29,21 @@ To enable connected account support, add the `supports_connected_account` field 
   "actions": {
     "create_issue": {
       "display_name": "Create Issue",
-      "description": "Creates a new issue in a repository"
+      "description": "Creates a new issue in a repository",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string", "description": "Repository name (owner/repo)" },
+          "title": { "type": "string", "description": "Issue title" }
+        },
+        "required": ["repo", "title"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "issue_url": { "type": "string", "description": "URL of the created issue" }
+        }
+      }
     }
   }
 }
@@ -54,12 +69,12 @@ from autohive_integrations_sdk import ConnectedAccountInfo
 class ConnectedAccountInfo:
     """Information about the connected account"""
     email: Optional[str] = None
-    username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    username: Optional[str] = None
+    user_id: Optional[str] = None
     avatar_url: Optional[str] = None
     organization: Optional[str] = None
-    user_id: Optional[str] = None
 ```
 
 ### Implementing Connected Account Handler

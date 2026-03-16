@@ -1,3 +1,27 @@
+"""Autohive Integrations SDK — core module.
+
+Provides the building blocks for creating Autohive integrations:
+
+- `Integration` — load config and register action/trigger/connected-account handlers
+- `ExecutionContext` — authenticated HTTP client passed to every handler
+- `ActionHandler` — base class for action implementations (return `ActionResult`)
+- `ConnectedAccountHandler` — base class for connected-account lookups (return `ConnectedAccountInfo`)
+- `ActionResult` — standard return type wrapping action output data and optional billing cost
+- `ConnectedAccountInfo` — structured account info returned by connected-account handlers
+
+Typical usage::
+
+    from autohive_integrations_sdk import Integration, ActionHandler, ActionResult, ExecutionContext
+
+    integration = Integration.load()
+
+    @integration.action("my_action")
+    class MyAction(ActionHandler):
+        async def execute(self, inputs, context):
+            data = await context.fetch("https://api.example.com/resource")
+            return ActionResult(data=data)
+"""
+
 # Standard Library Imports
 from abc import ABC, abstractmethod
 import asyncio
@@ -27,7 +51,22 @@ T = TypeVar('T')
 
 # ---- Auth Types ----
 class AuthType(Enum):
-    """The type of authentication to use"""
+    """Authentication strategy used by an integration.
+
+    The platform stores the auth type alongside credentials and passes both
+    to ``ExecutionContext``.  ``context.fetch()`` uses the type to decide
+    whether to auto-inject an ``Authorization`` header.
+
+    Members:
+        PlatformOauth2: Platform-managed OAuth 2.0 — the platform handles the
+            token lifecycle and injects ``Bearer <access_token>`` automatically.
+        PlatformTeams: Platform-managed Microsoft Teams auth.
+        ApiKey: A single API key provided by the user.
+        Basic: Username/password (HTTP Basic) credentials.
+        Custom: Free-form credential fields defined by the integration's
+            ``config.json`` auth schema.  The integration is responsible for
+            reading individual fields from ``context.auth``.
+    """
     PlatformOauth2 = "PlatformOauth2"
     PlatformTeams = "PlatformTeams"
     ApiKey = "ApiKey"
@@ -42,7 +81,16 @@ class ResultType(Enum):
 
 # ---- Exceptions ----
 class ValidationError(Exception):
-    """Raised when inputs/outputs validation fails"""
+    """Raised when SDK validation fails.
+
+    This covers several cases:
+
+    - Action inputs don't match the ``input_schema`` in ``config.json``
+    - Action outputs don't match the ``output_schema``
+    - Auth credentials don't match the ``auth.fields`` schema
+    - An action handler returns something other than ``ActionResult``
+    - A handler name isn't registered
+    """
     def __init__(self, message: str, schema: str = None, inputs: str = None):
         self.schema = schema
         """The schema that failed validation"""
@@ -57,7 +105,7 @@ class ConfigurationError(Exception):
     pass
 
 class HTTPError(Exception):
-    """Custom HTTP error with detailed information"""
+    """Raised by ``ExecutionContext.fetch()`` for non-2xx HTTP responses (except 429)."""
     def __init__(self, status: int, message: str, response_data: Any = None):
         self.status = status
         """Status code"""
@@ -68,10 +116,15 @@ class HTTPError(Exception):
         super().__init__(f"HTTP {status}: {message}")
 
 class RateLimitError(HTTPError):
-    """Raised when rate limited by the API"""
+    """Raised by ``ExecutionContext.fetch()`` on HTTP 429 (Too Many Requests).
+
+    Attributes:
+        retry_after: Seconds to wait before retrying, taken from the
+            ``Retry-After`` response header (defaults to 60 if absent).
+    """
     def __init__(self, retry_after: int, *args, **kwargs):
         self.retry_after = retry_after
-        """Retry after"""
+        """Seconds to wait before retrying."""
         super().__init__(*args, **kwargs)
 
 # ---- Result Classes ----
@@ -99,7 +152,14 @@ class ActionResult:
 
 @dataclass
 class ConnectedAccountInfo:
-    """Information about a connected account from an external service"""
+    """Account metadata returned by a ``ConnectedAccountHandler``.
+
+    The platform calls the connected-account handler after a user links
+    their external account.  The returned info is displayed in the
+    Autohive UI (avatar, name, email, etc.).
+
+    All fields are optional — populate whichever ones the external API provides.
+    """
     email: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -172,10 +232,30 @@ class IntegrationConfig:
 
 # ---- Base Handler Classes ----
 class ActionHandler(ABC):
-    """Base class for action handlers"""
+    """Base class for action handlers.
+
+    Subclass this and implement ``execute()`` to handle a specific action.
+    Register it with the ``@integration.action("action_name")`` decorator.
+
+    Example::
+
+        @integration.action("get_user")
+        class GetUser(ActionHandler):
+            async def execute(self, inputs, context):
+                user = await context.fetch(f"https://api.example.com/users/{inputs['id']}")
+                return ActionResult(data=user)
+    """
     @abstractmethod
     async def execute(self, inputs: Dict[str, Any], context: 'ExecutionContext') -> Any:
-        """Execute the action"""
+        """Run the action logic.
+
+        Args:
+            inputs: Validated action inputs matching the ``input_schema`` from ``config.json``.
+            context: Execution context providing ``fetch()``, ``auth``, and logging.
+
+        Returns:
+            An ``ActionResult`` containing the output data and optional ``cost_usd``.
+        """
         pass
 
 class PollingTriggerHandler(ABC):
@@ -186,23 +266,58 @@ class PollingTriggerHandler(ABC):
         pass
 
 class ConnectedAccountHandler(ABC):
-    """Base class for connected account handlers"""
+    """Base class for connected-account handlers.
+
+    The platform calls this after a user links their external account.
+    The returned ``ConnectedAccountInfo`` is shown in the Autohive UI.
+
+    Register with the ``@integration.connected_account()`` decorator.
+
+    Example::
+
+        @integration.connected_account()
+        class MyAccountHandler(ConnectedAccountHandler):
+            async def get_account_info(self, context):
+                me = await context.fetch("https://api.example.com/me")
+                return ConnectedAccountInfo(
+                    email=me["email"],
+                    first_name=me["first_name"],
+                    last_name=me["last_name"],
+                )
+    """
     @abstractmethod
     async def get_account_info(self, context: 'ExecutionContext') -> ConnectedAccountInfo:
-        """Get connected account information
-        
+        """Fetch account metadata from the external service.
+
+        For platform OAuth integrations, ``context.fetch()`` auto-injects
+        the Bearer token — no manual auth handling needed.
+
         Returns:
-            ConnectedAccountInfo with optional fields: email, first_name, last_name, 
-            username, user_id, avatar_url, organization
+            A ``ConnectedAccountInfo`` with whichever fields the API provides.
         """
         pass
 
 # ---- Core SDK Classes ----
 class ExecutionContext:
     """Context provided to integration handlers for making authenticated HTTP requests.
-    
-    This class manages authentication, HTTP sessions, and provides a convenient interface
-    for making API requests with automatic retries, error handling, and logging."""
+
+    Manages an ``aiohttp`` session with automatic retries, error handling, and
+    optional Bearer-token injection for platform OAuth integrations.
+
+    Use as an async context manager::
+
+        async with ExecutionContext(auth=auth) as context:
+            result = await integration.execute_action("my_action", inputs, context)
+
+    Args:
+        auth: Authentication data.  In **local tests** this is a flat dict
+            matching the ``auth.fields`` schema in ``config.json``
+            (e.g. ``{"api_key": "..."}``).  In **production** the platform
+            wraps credentials as ``{"auth_type": "...", "credentials": {...}}``.
+        request_config: Override default ``max_retries`` (3) and ``timeout`` (30 s).
+        metadata: Arbitrary metadata forwarded to handlers.
+        logger: Custom logger; falls back to ``logging.getLogger(__name__)``.
+    """
     def __init__(
         self,
         auth: Dict[str, Any] = {}, 
@@ -242,28 +357,38 @@ class ExecutionContext:
             timeout: Optional[int] = None,
             retry_count: int = 0
     ) -> Any:
-        """Make an authenticated HTTP request.
-        
-        This method handles authentication, retries, error handling, and response parsing.
-        
+        """Make an HTTP request with automatic retries and error handling.
+
+        For **platform OAuth** integrations (``auth_type == "PlatformOauth2"``),
+        a ``Bearer`` token is auto-injected from ``auth.credentials.access_token``
+        unless an ``Authorization`` header is explicitly provided.
+
+        Retries up to ``max_retries`` (default 3) on transient network errors
+        with exponential back-off.  HTTP 429 responses raise ``RateLimitError``
+        immediately (no automatic retry).
+
         Args:
-            url: The URL to request
-            method: HTTP method to use. Defaults to "GET".
-            params: Query parameters
-            data: Request body data
-            json: JSON data to send (will set content_type to application/json)
-            headers: Additional HTTP headers
-            content_type: Content-Type header
-            timeout: Request timeout in seconds
-            retry_count: Current retry attempt (used internally)
-            
+            url: The URL to request.
+            method: HTTP method (``"GET"``, ``"POST"``, ``"PUT"``, etc.).
+            params: Query parameters appended to the URL.  Nested dicts/lists
+                are JSON-serialized automatically.
+            data: Raw request body.  Encoding depends on ``content_type``.
+            json: JSON-serializable payload.  Sets ``content_type`` to
+                ``application/json`` automatically.
+            headers: Additional HTTP headers.  Merged *after* any auto-injected
+                auth header, so an explicit ``Authorization`` takes precedence.
+            content_type: ``Content-Type`` header value.
+            timeout: Per-request timeout in seconds (overrides ``request_config``).
+            retry_count: Internal — current retry attempt number.
+
         Returns:
-            Response data, parsed as JSON if possible
-            
+            Parsed JSON (``dict``/``list``) when the response is
+            ``application/json``, otherwise the raw response text.
+            Returns ``None`` for empty 200/201/204 responses.
+
         Raises:
-            HTTPError: For HTTP error responses
-            RateLimitError: When rate limited by the API
-            Exception: For other request errors
+            RateLimitError: On HTTP 429 with the ``Retry-After`` value.
+            HTTPError: On any other non-2xx status.
         """
         if not self._session:
             self._session = aiohttp.ClientSession()
@@ -395,16 +520,21 @@ class Integration:
 
     @classmethod
     def load(cls, config_path: Union[str, Path] = None) -> 'Integration':
-        """Load integration from JSON configuration.
-        
+        """Load an integration from its ``config.json``.
+
         Args:
-            config_path: Path to the configuration file. Defaults to 'config.json' in the project root.
-            
+            config_path: Explicit path to ``config.json``.  When omitted the
+                SDK resolves the path relative to its own package location,
+                which works when the SDK is vendored via
+                ``pip install --target dependencies``.  Multi-file integrations
+                that use ``actions/`` sub-packages should pass an explicit path
+                (e.g. ``Integration.load("config.json")``).
+
         Returns:
-            Initialized integration instance
-            
+            A fully initialised ``Integration`` ready for handler registration.
+
         Raises:
-            ConfigurationError: If configuration is invalid or missing
+            ConfigurationError: If the file is missing or contains invalid JSON.
         """
         if config_path is None:
             config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.json')

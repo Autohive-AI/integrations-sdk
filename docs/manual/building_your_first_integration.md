@@ -1,439 +1,480 @@
-# Building your first integration
+# Building Your First Integration
 
-This guide will walk you through the process of building and setting up your own integrations for AutoHive. We use code samples from the api-fetch example in the `samples` directory to guide you along the way.
+This guide walks you through building an Autohive integration from scratch. By the end, you'll have a working integration with configuration, action handlers, and tests.
 
-## Table of Contents
+## Prerequisites
 
-1. [Introduction](#introduction)
-2. [Integration Structure](#integration-structure)
-3. [Step-by-Step Integration Development](#step-by-step-integration-development)
-4. [Testing Your Integration](#testing-your-integration)
-5. [Examples](#examples)
-
-## Introduction
-
-AutoHive integrations allow you to connect external services and data sources to the AutoHive platform. Each integration follows a consistent structure and pattern, making it straightforward to develop new ones once you understand the basics.
-
-AutoHive integrations require Python 3.13+. The SDK installation enforces this version of Python. Future versions of this SDK might change the Python version requirements.
+- **Python 3.13+** — the SDK enforces this version
+- **pip** or [uv](https://docs.astral.sh/uv/) for package management
+- A code editor
 
 ## Integration Structure
 
-A typical AutoHive integration consists of the following components:
-
-- **Integration Directory**: Named after your integration (e.g., `github`, `slack`, `rss-reader`)
-- **Configuration File**: Define how your integration connects to external services
-- **Your integration code with API handlers**: Code that interacts with external APIs
-
-## Step-by-Step Integration Development
-
-### 1. Create Your Integration Directory
-
-#### Directory 
-
-Start by creating a new directory for your integration:
+Every Autohive integration lives in its own directory and follows this structure:
 
 ```
+my-integration/
+├── config.json              # Integration metadata and action definitions
+├── my_integration.py        # Main implementation (entry point)
+├── __init__.py              # Package init — only import and __all__
+├── requirements.txt         # Dependencies (must include autohive-integrations-sdk)
+├── README.md                # Documentation
+├── icon.png or icon.svg     # Integration icon (512×512 pixels)
+└── tests/
+    ├── __init__.py           # Can be empty
+    ├── context.py            # Import setup
+    └── test_my_integration.py
+```
+
+### Naming Conventions
+
+- **Directory name**: lowercase with hyphens (`my-integration`, `google-sheets`)
+- **Python module**: lowercase with underscores (`my_integration.py`)
+- **Action names**: snake_case (`list_items`, `create_record`)
+
+## Step 1: Create Your Directory
+
+```bash
 mkdir my-integration
 cd my-integration
 ```
 
-#### Install autohive_integrations_sdk 
+## Step 2: Set Up Dependencies
 
-The current process of installing `autohive_integration_sdk` requires installing the package from the PyPi environment. In your new directory, run:
-
-`pip install autohive-integrations-sdk==0.1.2 --target=dependencies` 
-
-Replace the version `0.1.2` with what is currently the latest.
-
-This command should create a `dependencies` subdirectory in `my-integration` and its output would look similar to:
+Create a `requirements.txt`:
 
 ```
-Looking in indexes: https://test.pypi.org/simple/, https://pypi.org/simple/
-Collecting autohive-integrations-sdk==0.0.6
-  Using cached https://test-files.pythonhosted.org/packages/ed/d7/76522637d719d27db20bad3dfcd16b0a07e2e3a142ca553a21bfaa60eb3a/autohive_integrations_sdk-0.0.6-py3-none-any.whl.metadata (930 bytes)
-Collecting aiohttp (from autohive-integrations-sdk==0.0.6)
-  Using cached aiohttp-3.11.16-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (7.7 kB)
-Collecting jsonschema (from autohive-integrations-sdk==0.0.6)
-  Using cached jsonschema-4.23.0-py3-none-any.whl.metadata (7.9 kB)
-Collecting aiohappyeyeballs>=2.3.0 (from aiohttp->autohive-integrations-sdk==0.0.6)
-  Using cached aiohappyeyeballs-2.6.1-py3-none-any.whl.metadata (5.9 kB)
-Collecting aiosignal>=1.1.2 (from aiohttp->autohive-integrations-sdk==0.0.6)
-  Using cached aiosignal-1.3.2-py2.py3-none-any.whl.metadata (3.8 kB)
-Collecting attrs>=17.3.0 (from aiohttp->autohive-integrations-sdk==0.0.6)
-  Using cached attrs-25.3.0-py3-none-any.whl.metadata (10 kB)
-Collecting frozenlist>=1.1.1 (from aiohttp->autohive-integrations-sdk==0.0.6)
-  Using cached frozenlist-1.5.0-cp313-cp313-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (13 kB)
-Collecting multidict<7.0,>=4.5 (from aiohttp->autohive-integrations-sdk==0.0.6)
-  Using cached multidict-6.3.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.1 kB)
-Collecting propcache>=0.2.0 (from aiohttp->autohive-integrations-sdk==0.0.6)
-  Using cached propcache-0.3.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (10 kB)
-Collecting yarl<2.0,>=1.17.0 (from aiohttp->autohive-integrations-sdk==0.0.6)
-  Using cached yarl-1.19.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (71 kB)
-Collecting jsonschema-specifications>=2023.03.6 (from jsonschema->autohive-integrations-sdk==0.0.6)
-  Using cached jsonschema_specifications-2024.10.1-py3-none-any.whl.metadata (3.0 kB)
-Collecting referencing>=0.28.4 (from jsonschema->autohive-integrations-sdk==0.0.6)
-  Using cached referencing-0.36.2-py3-none-any.whl.metadata (2.8 kB)
-Collecting rpds-py>=0.7.1 (from jsonschema->autohive-integrations-sdk==0.0.6)
-  Using cached rpds_py-0.24.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.1 kB)
-Collecting idna>=2.0 (from yarl<2.0,>=1.17.0->aiohttp->autohive-integrations-sdk==0.0.6)
-  Using cached idna-3.10-py3-none-any.whl.metadata (10 kB)
-Downloading https://test-files.pythonhosted.org/packages/ed/d7/76522637d719d27db20bad3dfcd16b0a07e2e3a142ca553a21bfaa60eb3a/autohive_integrations_sdk-0.0.6-py3-none-any.whl (7.5 kB)
-Using cached aiohttp-3.11.16-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (1.7 MB)
-Using cached jsonschema-4.23.0-py3-none-any.whl (88 kB)
-Using cached aiohappyeyeballs-2.6.1-py3-none-any.whl (15 kB)
-Using cached aiosignal-1.3.2-py2.py3-none-any.whl (7.6 kB)
-Using cached attrs-25.3.0-py3-none-any.whl (63 kB)
-Using cached frozenlist-1.5.0-cp313-cp313-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (267 kB)
-Using cached jsonschema_specifications-2024.10.1-py3-none-any.whl (18 kB)
-Using cached multidict-6.3.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (248 kB)
-Using cached propcache-0.3.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (228 kB)
-Using cached referencing-0.36.2-py3-none-any.whl (26 kB)
-Using cached rpds_py-0.24.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (393 kB)
-Using cached yarl-1.19.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (347 kB)
-Using cached idna-3.10-py3-none-any.whl (70 kB)
-Installing collected packages: rpds-py, propcache, multidict, idna, frozenlist, attrs, aiohappyeyeballs, yarl, referencing, aiosignal, jsonschema-specifications, aiohttp, jsonschema, autohive-integrations-sdk
-Successfully installed aiohappyeyeballs-2.6.1 aiohttp-3.11.16 aiosignal-1.3.2 attrs-25.3.0 autohive-integrations-sdk-0.0.6 frozenlist-1.5.0 idna-3.10 jsonschema-4.23.0 jsonschema-specifications-2024.10.1 multidict-6.3.2 propcache-0.3.1 referencing-0.36.2 rpds-py-0.24.0 yarl-1.19.0
+autohive-integrations-sdk~=1.0.2
 ```
 
-#### Role of `autohive_integrations_sdk`
+The `~=` (compatible release) operator means `>=1.0.2, <1.1.0` — you'll get patch updates with bug fixes, but won't be surprised by minor version changes that could alter SDK behaviour.
 
-The SDK contains a core file, `integration.py`, that provides a fundamental set of functionality for integration authors and internal users at AutoHive.
+Add any additional libraries your integration needs beyond the SDK (e.g., `feedparser` for RSS parsing, `stripe` for the Stripe client library).
 
-On a high level, the files content are:
+Install your dependencies:
 
-- **Type Definitions**: Custom types and state management for integrations
+```bash
+pip install -r requirements.txt
+```
 
-- **Exception Classes**: Custom exceptions for validation, configuration and HTTP operations
+## Step 3: Define Your Configuration
 
-- **Configuration Classes**: 
-  - `Action`: Defines integration actions
-  - `PollingTrigger`: Defines polling-based triggers
-  - `IntegrationConfig`: Overall integration configuration
-  
-  and others
+Create `config.json`. This file defines your integration's metadata, authentication, and actions.
 
-- **Base Handler Classes**:
-  - `ActionHandler`: Base class for implementing action handlers
-  - `PollingTriggerHandler`: Base class for implementing polling trigger handlers
+### Minimal Example (No Auth)
 
-- **ExecutionContext**: Provides authenticated HTTP request functionality for integrations
-
-### 2. Define Your Integration Configuration
-
-Create a `config.json` file in your integration directory:
+For public APIs that don't require authentication:
 
 ```json
 {
     "name": "my-integration",
-    "version": "0.1.0",
-    "description": "Integration with My Service",
+    "version": "1.0.0",
+    "description": "Fetches data from the Example API",
     "entry_point": "my_integration.py",
-    "auth": {
-        "identifier": "my_auth",
-        "type": "Custom",
-        "fields": {
-            "type":"object",
-            "properties": {
-                "user_name": {
-                    "type": "string",
-                    "format": "text",
-                    "label": "User name",
-                    "help_text": "You'll get this from the API provider."
+    "actions": {
+        "get_items": {
+            "display_name": "Get Items",
+            "description": "Retrieves a list of items from the Example API",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of items to return (1-100)",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 100
+                    }
                 },
-                "password": {
-                    "type": "string",
-                    "format": "password",
-                    "label": "Password",
-                    "help_text": "You'll get this from the API provider."
-                }
+                "required": []
             },
-            "required": [
-                "user_name",
-                "password"
-            ]
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "description": "List of items"
+                    },
+                    "count": {
+                        "type": "integer",
+                        "description": "Number of items returned"
+                    },
+                    "result": {
+                        "type": "boolean",
+                        "description": "Whether the operation succeeded"
+                    },
+                    "error": {
+                        "type": "string",
+                        "description": "Error message if result is false"
+                    }
+                }
+            }
         }
-    },
-    ...
+    }
 }
 ```
 
-The content of `auth.fields` has to be valid JSON Schema. Properties like `format`, `label` and `help_text` will in the future be used for rendering a UI when an instance of the integration is being setup.
+### Required Top-Level Fields
 
-The example above setups up custom auth with `user_name` and `password`, which would both sent to your integration at runtime.
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Integration identifier (lowercase) |
+| `version` | string | Semantic version (`MAJOR.MINOR.PATCH`) |
+| `description` | string | What the integration does |
+| `entry_point` | string | Main Python file name (must end in `.py`) |
+| `actions` | object | At least one action definition |
 
-The only useful value for `auth.type` for integration-defined authentication is currently `Custom`. Platform-defined authentication will introduce its own values. 
+### Optional Top-Level Fields
 
-### 3. Create Your Integration Handler File and its dependencies
+| Field | Type | Description |
+|-------|------|-------------|
+| `display_name` | string | Human-readable name for the UI |
+| `auth` | object | Authentication configuration (see [Authentication](#authentication)) |
+| `supports_billing` | boolean | Enable cost tracking via `ActionResult.cost_usd` (see [billing docs](billing.md)) |
+| `supports_connected_account` | boolean | Enable connected account display (see [connected account docs](connected_account.md)) |
 
-Create a `my_integration.py` file that will contain the main logic for your integration:
+### Action Definitions
+
+Each action in the `actions` object must have:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `description` | Yes | What the action does |
+| `input_schema` | Yes | JSON Schema defining accepted inputs |
+| `output_schema` | Yes | JSON Schema defining the response structure |
+| `display_name` | Recommended | Human-readable action name for the UI |
+
+The `input_schema` and `output_schema` must be valid [JSON Schema](https://json-schema.org/). The SDK validates inputs and outputs against these schemas at runtime.
+
+## Authentication
+
+### Custom Auth (API Key / Token)
+
+For integrations where users provide their own credentials. Use `title` to label the auth section in the UI:
+
+```json
+"auth": {
+    "type": "custom",
+    "title": "API Token Authentication",
+    "fields": {
+        "type": "object",
+        "properties": {
+            "api_token": {
+                "type": "string",
+                "format": "password",
+                "label": "API Token",
+                "help_text": "Find your API token at https://example.com/settings"
+            }
+        },
+        "required": ["api_token"]
+    }
+}
+```
+
+The `fields` value must be valid JSON Schema. The `format`, `label`, and `help_text` properties are used to render the authentication UI in Autohive.
+
+At runtime, credentials are nested under `context.auth["credentials"]`. For custom auth, access fields like: `context.auth.get("credentials", {}).get("api_token")`.
+
+### Platform Auth (OAuth2)
+
+For integrations using Autohive's built-in OAuth2 providers:
+
+```json
+"auth": {
+    "type": "platform",
+    "provider": "github",
+    "scopes": ["repo", "read:user"]
+}
+```
+
+With platform auth, the SDK automatically injects the `Authorization` header into requests made via `context.fetch()`. You generally don't need to handle tokens yourself.
+
+### No Auth
+
+For public APIs, omit the `auth` field entirely.
+
+## Step 4: Write Your Integration Code
+
+Create `my_integration.py`:
 
 ```python
 from autohive_integrations_sdk import (
-    Integration, ExecutionContext, ActionHandler, PollingTriggerHandler
+    Integration, ExecutionContext, ActionHandler, ActionResult
 )
 from typing import Dict, Any
 
-# Create the integration using the config.json
-api_fetch = Integration.load()
+# Load integration configuration
+my_integration = Integration.load()
+
+BASE_URL = "https://api.example.com/v1"
+
+
+@my_integration.action("get_items")
+class GetItemsAction(ActionHandler):
+    """Retrieves items from the Example API."""
+
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
+        limit = inputs.get("limit", 10)
+
+        try:
+            response = await context.fetch(
+                f"{BASE_URL}/items",
+                method="GET",
+                params={"limit": limit}
+            )
+
+            items = response.get("data", [])
+
+            return ActionResult(
+                data={
+                    "items": items,
+                    "count": len(items),
+                    "result": True,
+                },
+                cost_usd=0.0
+            )
+        except Exception as e:
+            return ActionResult(
+                data={
+                    "items": [],
+                    "count": 0,
+                    "result": False,
+                    "error": str(e),
+                },
+                cost_usd=0.0
+            )
 ```
 
-Currently there are two types of interactions an integration can have:
+### Key Concepts
 
-- `ActionHandler`-based: a one-off call made by your integration
-- `PollingTriggerHandler`-based: a call that gets triggered from AutoHive based on a regular schedule
+**`Integration.load()`** — Loads your `config.json` and creates the integration instance. Call this at module level.
 
-#### ActionHandler-based
+**`@integration.action("action_name")`** — Decorator that registers a handler class for the named action. The name must match a key in your `config.json` `actions` object.
 
-Your integration needs to define annotated classes and inherit from the correct handler type. An example for a basic `ActionHandler`-based handler could look like:
+**`ActionHandler`** — Base class for all action handlers. You must implement the `async def execute()` method.
+
+**`ExecutionContext`** — Provided to every handler. Gives you:
+- `context.fetch(url, ...)` — Make HTTP requests with automatic auth handling
+- `context.auth` — Access authentication credentials
+
+**`ActionResult`** — The required return type for all action handlers. Contains:
+- `data` — Your response data (validated against `output_schema`)
+- `cost_usd` — Optional cost in USD for billing tracking (see [billing docs](billing.md))
+
+### Making HTTP Requests
+
+Use `context.fetch()` for all HTTP calls. It handles authentication headers, retries, timeouts, and response parsing automatically.
 
 ```python
-@my_integration.action("my_action_handler")
-class APIFetchActionHeader(ActionHandler):
-    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext):
-        url = inputs["url"]
-        api_key = context.auth["api_key"]
+# GET with query parameters
+response = await context.fetch(
+    f"{BASE_URL}/items",
+    method="GET",
+    params={"limit": 10, "status": "active"}
+)
 
-        # Do the API call here
-        response = await context.fetch(url, headers={"Authorization": f"Bearer {api_key}"})
-    
-        print("Response: ", response)
+# POST with JSON body
+response = await context.fetch(
+    f"{BASE_URL}/items",
+    method="POST",
+    headers={"Content-Type": "application/json"},
+    json={"name": "New Item", "status": "active"}
+)
 
-        return response
+# POST with form-encoded body
+response = await context.fetch(
+    f"{BASE_URL}/items",
+    method="POST",
+    headers={"Content-Type": "application/x-www-form-urlencoded"},
+    data={"name": "New Item"}
+)
 ```
 
-This integration handler will take a URL and an API key and call the URL with the given API Key sent as a bearer token header. The response will be passed back to AutoHive.
+### Handling Inputs
 
-Inside of an `ActionHandler`-based handler you will need to provide an `execute` method that accepts a `Dict` of input variables (matching what's defined in your `config.json`) and an `ExecutionContext` from the SDK. The context will provide network functionality via its `fetch` method and `context.auth` provides information for the purpose of integration-defined auth in AutoHive.
+Use `inputs.get()` with a default for optional fields. Use `inputs["key"]` for required fields (the SDK validates required fields against your `input_schema` before calling your handler).
 
-To get the API key passed into your `ExecutionContext`, the `config.json`'s `auth` section would have to be amended by adding:
+```python
+# Optional field — safe access with default
+limit = inputs.get("limit", 10)
 
-```json
-"api_key": {
-    "type": "string",
-    "format": "text",
-    "label": "API Key",
-    "help_text": "You'll get this from the API provider."
-}
+# Required field — safe because the SDK validates required fields first
+customer_id = inputs["customer_id"]
+
+# Optional field — check before using
+email = inputs.get("email")
+if email:
+    body["email"] = email
 ```
 
-You could at this stage also add `api_key` to the list of required fields.
+### Handler Class Naming
 
-The handler's `input` `Dict` will be supplied from the AutoHive system. This requires an additional configuration elemement (`actions`) in `config.json`:
+Use `PascalCase` with an `Action` suffix:
 
-```json
-{
-    "name": "my-integration",
-    "version": "0.1.0",
-    "description": "Integration with My Service",
-    "entry_point": "my_integration.py",
-    "auth": {
-        ...
-    },
-    "actions": {
-        "my_action_handler": {
-            "description": "Call an API.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "The URL of the API to call."
-                    }
-                },
-                "required": [
-                    "url"
-                ]
-            },
-            "output_schema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "description": "The data returned from the API call."
-                    }
-                },
-                "required": [
-                    "data"
-                ]
-            }
-        },
-        ... 
-    },
+```python
+@integration.action("list_customers")
+class ListCustomersAction(ActionHandler):
     ...
-}
 
-```
-
-`input_schema` and `output_schema` have to be valid JSON Schema. In the example above, a required `url` is defined as input and the expected response in `output_schema` is an object named `data`. This object could have further nested structures and actual data coming in or being returned from the integration will be validated against this schema.
-
-#### PollingTriggerHandler-based
-
-Integrations that use `PollingTriggerHandler` require a slightly different approach. Please note that thid approach is still under development and is described here for information and feedback purpose only. Polling triggers are not yet supported on AutoHive's back end systems.
-
-
-```python
-@rss_reader.polling_trigger("new_entries")
-class NewEntriesPoller(PollingTriggerHandler):
-    async def poll(self, inputs: Dict[str, Any], last_poll_ts: Optional[str], context: ExecutionContext):
-        feeds = inputs["feeds"]
-        new_entries = []
-        ...
-    
-```
-
-The underlying class has to inherit from `PollingTriggerHandler` and the annotation syntax is slightly different from `ActionHandler`
-
-The example above shows a polling trigger for an RSS feed reader. The `poll` method has to be implemented to fulfill the contract and in addition to `inputs` and `context`, the polling trigger call delivers a `last_poll_ts` argument. This is an epoch timestamp of the time the last time this polling trigger was exectuted.
-
-This information can for example be used within the integration to do additional data filtering and only to return most recent results to AutoHive.
-
-There is no need to modify or update the timestamp, AutoHive tracks when the trigger was executed and stores the most recent value.
-
-The accompanying change to `config.json` adds another section to the configuration: `polling_triggers`
-
-```json
-{
-    "name": "my-integration",
-    "version": "0.1.0",
-    "description": "Integration with My Service",
-    "entry_point": "my_integration.py",
-    "auth": {
-        ...
-    },
+@integration.action("create_invoice")
+class CreateInvoiceAction(ActionHandler):
     ...
-    "polling_triggers": {
-        "new_entries": {
-            "description": "Poll for new entries in specified RSS feeds.",
-            "polling_interval": "5m",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "feeds": {
-                        "type": "array",
-                        "description": "Array of RSS feed URLs to monitor.",
-                        "items": {
-                            "type": "string",
-                            "description": "A URL of an RSS feed to read."
-                        }
-                    }
-                },
-                "required": [
-                    "feeds"
-                ]
-            },
-            "output_schema": {
-                "type": "object",
-                "properties": {
-                    "feed_url": {
-                        "type": "string",
-                        "description": "URL of the RSS feed"
-                    },
-                    "feed_title": {
-                        "type": "string",
-                        "description": "Title of the RSS feed"
-                    },
-                    "title": {
-                        "type": "string",
-                        "description": "Entry title"
-                    },
-                    "link": {
-                        "type": "string",
-                        "description": "Link to entry"
-                    },
-                    "description": {
-                        "type": "string",
-                        "description": "The description of the entry"
-                    },
-                    "published": {
-                        "type": "string",
-                        "description": "Published date"
-                    },
-                    "author": {
-                        "type": "string",
-                        "description": "Author"
-                    }
-                },
-                "required": [
-                    "feed_url",
-                    "feed_title",
-                    "title",
-                    "link",
-                    "description",
-                    "published",
-                    "author"
-                ]
-            }
-        }
-    }
-    ...
+```
+
+## Step 5: Add Package Files
+
+### `__init__.py`
+
+Can be empty, or contain a minimal import and export:
+
+```python
+# Option 1: empty file (sufficient)
+
+# Option 2: import and export
+from .my_integration import my_integration
+
+__all__ = ["my_integration"]
+```
+
+Do not add any logic, logging, or additional code to this file.
+
+### `icon.png` or `icon.svg`
+
+Add a 512×512 pixel icon for your integration.
+
+### `README.md`
+
+Document your integration: what it does, how to authenticate, what each action accepts and returns. See the `samples/` directory for a reference README.
+
+## Step 6: Write Tests
+
+### `tests/__init__.py`
+
+Can be empty.
+
+### `tests/context.py`
+
+Sets up the import path so tests can find your integration:
+
+```python
+import sys
+import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from my_integration import my_integration  # noqa: F401
+```
+
+### `tests/test_my_integration.py`
+
+```python
+import asyncio
+from context import my_integration
+from autohive_integrations_sdk import ExecutionContext
+
+
+async def test_get_items():
+    """Test fetching items."""
+    inputs = {"limit": 5}
+
+    async with ExecutionContext(auth={}) as context:
+        result = await my_integration.execute_action("get_items", inputs, context)
+
+        # execute_action returns an IntegrationResult
+        # result.result contains the ActionResult
+        # result.result.data contains your response data
+        data = result.result.data
+        assert "items" in data
+        assert "count" in data
+        assert data["result"] is True
+        print(f"Got {data['count']} items")
+
+
+if __name__ == "__main__":
+    asyncio.run(test_get_items())
+```
+
+For integrations that require authentication, pass credentials matching your `auth.fields` schema:
+
+```python
+auth = {
+    "api_token": "your-test-token"
 }
-
-```
-
-The example above also shows a more complex scenario for an `output_schema` in which an object response type is being defined. 
-
-The expectation is that a polling trigger generally returns a collection of objects at the same time. The collections' objects will need to have a unique `id` field (for instance a UUID or a hashed string) and a `data` fields holding what is defined in `output_schema`.
-
-### 4. Create a Requirements File
-
-Create a Python `requirements.txt` file in your integration's directory to specify any Python dependencies your integration needs. 
-
-Then run `pip install -r requirements.txt --target dependencies` from your integration's directory to install (or update) the additional dependencies from your own code locally to your directory.
-
-## Testing Your Integration
-
-At this stage, the easiest way to test the general functionality of your integration code by running it inside of a local testbed.
-
-The general structure of such a testbed can be seen in `samples/api-fetch/test_api_fetch.py`.
-
-Key concerns are:
-
-1. Ensure the local dependencies are available:
-
-```python
-# Add the dependencies directory to the Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), "dependencies"))
-```
-
-2. Import your own integration as a module:
-
-```python
-from api_fetch import api_fetch
-from integration import ExecutionContext
-```
-
-3. Run your integration using an `async` `ExecutionContext`:
-
-```python
-# Use the ExecutionContext as an async context manager
 async with ExecutionContext(auth=auth) as context:
-
-    # Mock auth
-    auth = {
-        "user_name": "test_user",
-        "password": "test_password",
-        "api_key": "test_api_key"
-    }
-
-    # Define test configuration
-    inputs = {
-        "url": "http://localhost:8000/test"
-    }
-
-    try:
-        result = await api_fetch.execute_action("call_api", inputs, context)
-        print("call_api:", result, "\n")
-    except Exception as e:
-        print(f"Error testing call_api: {e.message}")
-    ...
+    result = await my_integration.execute_action("get_items", inputs, context)
 ```
 
-The actual api-fetch sample integration demonstrates a call to a customiseable URL in three variations:
+> **Note:** In production, the platform wraps credentials as `{"auth_type": "...", "credentials": {"api_token": "..."}}`. That's why production action handlers access `context.auth.get("credentials", {}).get("api_token")`. When testing locally with `execute_action`, the SDK validates `context.auth` directly against your `auth.fields` schema, so pass credentials flat.
 
-- No Auth
-- HTTP BASIC Auth
-- API Key as Bearer Token
+## Multi-File Integrations
 
-If you spin up a local HTTP server as shown above, you should be able to inspect different headers and bodies being sent from the integration. The `config.json` of the api-fetch sample integration requires the result to a JSON object containing a `data` object. 
+For integrations with many actions, split handlers into an `actions/` directory:
 
-We will provide additional samples and updates to this SDK over time.
+```
+my-integration/
+├── config.json
+├── my_integration.py         # Loads integration, imports action modules
+├── helpers.py                # Shared utilities
+├── requirements.txt
+├── README.md
+├── icon.png
+├── actions/
+│   ├── __init__.py
+│   ├── items.py              # Item-related actions
+│   └── users.py              # User-related actions
+└── tests/
+    ├── __init__.py
+    ├── context.py
+    └── test_my_integration.py
+```
+
+**Main entry point (`my_integration.py`):**
+
+```python
+from autohive_integrations_sdk import Integration
+
+# Explicit path is required for multi-file integrations so that
+# config.json is found regardless of which submodule triggers the load
+import os
+config_path = os.path.join(os.path.dirname(__file__), "config.json")
+my_integration = Integration.load(config_path)
+
+# Import action modules to register their handlers
+import actions
+```
+
+**Action module (`actions/items.py`):**
+
+```python
+from my_integration import my_integration
+from helpers import get_headers
+from autohive_integrations_sdk import ActionHandler, ActionResult, ExecutionContext
+from typing import Dict, Any
+
+@my_integration.action("list_items")
+class ListItemsAction(ActionHandler):
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
+        ...
+```
+
+When using this modular pattern, the root `__init__.py` is optional.
+
+## Validation
+
+Before submitting, validate your integration using the [autohive-integrations-tooling](https://github.com/autohive-ai/autohive-integrations-tooling):
+
+```bash
+# Validate structure and config
+python scripts/validate_integration.py my-integration
+
+# Run all code quality checks
+python scripts/check_code.py my-integration
+```
+
+See the tooling repo's documentation for setup instructions and the full list of checks.
+
+## Next Steps
+
+- [Billing and cost tracking](billing.md) — report per-action costs via `ActionResult.cost_usd`
+- [Connected account information](connected_account.md) — display which account authorized the integration
+- [autohive-integrations-tooling](https://github.com/autohive-ai/autohive-integrations-tooling) — CI/CD validation, checklist, and script reference

@@ -1,0 +1,51 @@
+{
+    "name": "my-integration",
+    "version": "1.0.0",
+    "display_name": "My Integration",
+    "description": "A brief description of what this integration does.",
+    "entry_point": "my_integration.py",
+    "supports_billing": false,
+    "auth": {
+        "type": "custom",
+        "title": "My Service Authentication",
+        "fields": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string",
+                    "format": "password",
+                    "label": "API Key",
+                    "help_text": "Your API key from the service provider."
+                }
+            },
+            "required": [
+                "api_key"
+            ]
+        }
+    },
+    "actions": {
+        "my_action": {
+            "display_name": "My Action",
+            "description": "Describe what this action does.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "example_input": {
+                        "type": "string",
+                        "description": "An example input field."
+                    }
+                },
+                "required": ["example_input"]
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "result": {
+                        "type": "object",
+                        "description": "The result data."
+                    }
+                }
+            }
+        }
+    }
+}

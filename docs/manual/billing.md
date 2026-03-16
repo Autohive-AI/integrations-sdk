@@ -1,8 +1,10 @@
 # Billing and Cost Tracking
 
+> This guide covers billing and cost tracking for integrations. For a complete walkthrough of building an integration, see [Building Your First Integration](building_your_first_integration.md).
+
 ## Overview
 
-Integrations can report per-action costs back to AutoHive for billing and usage tracking. This is useful for integrations that call paid third-party APIs where each execution has a measurable cost.
+Integrations can report per-action costs back to Autohive for billing and usage tracking. This is useful for integrations that call paid third-party APIs where each execution has a measurable cost.
 
 ## Configuration
 
@@ -52,9 +54,10 @@ integration = Integration.load()
 
 @integration.action("call_api")
 class CallApiAction(ActionHandler):
-    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext):
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
         url = inputs["url"]
-        api_key = context.auth["api_key"]
+        credentials = context.auth.get("credentials", {})
+        api_key = credentials.get("api_key", "")
 
         response = await context.fetch(url, headers={"Authorization": f"Bearer {api_key}"})
 
@@ -68,7 +71,7 @@ class CallApiAction(ActionHandler):
 
 - `cost_usd` is a `float` representing the cost in US dollars
 - Set `cost_usd=0.0` for actions that have no cost but still want to participate in billing tracking
-- Omit `cost_usd` (or set to `None`) if billing information is not available for a particular execution
+- Omit `cost_usd` if billing information is not available for a particular execution
 
 ## Example: Paid API Integration
 
@@ -77,9 +80,10 @@ For integrations calling APIs with per-request pricing, calculate and report the
 ```python
 @integration.action("generate_content")
 class GenerateContentAction(ActionHandler):
-    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext):
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
         prompt = inputs["prompt"]
-        api_key = context.auth["api_key"]
+        credentials = context.auth.get("credentials", {})
+        api_key = credentials.get("api_key", "")
 
         response = await context.fetch(
             "https://api.example.com/generate",
@@ -99,7 +103,7 @@ class GenerateContentAction(ActionHandler):
 ```
 ## Best Practices
 
-1. **Always return `ActionResult`** when `supports_billing` is `true`
+1. **Always return `ActionResult`** from action handlers
 2. **Be accurate with costs** - report the actual cost incurred by the third-party API call, not an estimate
 3. **Use `0.0` for free operations** - if an action doesn't cost anything, explicitly return `cost_usd=0.0` to signal that billing is working correctly
 4. **Calculate dynamically when possible** - if the API returns usage data (e.g., tokens consumed), use it to compute the cost rather than using a fixed value

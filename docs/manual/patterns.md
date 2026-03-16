@@ -38,7 +38,7 @@ class ListItemsAction(ActionHandler):
         return ActionResult(data={"items": all_items, "count": len(all_items)})
 ```
 
-This is the pattern used by the GitHub integration's `paginated_fetch` helper.
+This is the pattern used by the [GitHub integration's](https://github.com/Autohive-AI/autohive-integrations/tree/master/github) `paginated_fetch` helper.
 
 ### Cursor/Offset Pagination
 
@@ -74,7 +74,7 @@ class ListProjectsAction(ActionHandler):
         return ActionResult(data={"projects": all_projects, "count": len(all_projects)})
 ```
 
-This matches the pattern used by the Asana integration.
+This matches the pattern used by the [Asana integration](https://github.com/Autohive-AI/autohive-integrations/tree/master/asana).
 
 ### Returning Pagination to the Caller
 
@@ -99,7 +99,7 @@ class ListVideosAction(ActionHandler):
         })
 ```
 
-This matches the pattern used by the TikTok integration.
+This matches the pattern used by the [TikTok integration](https://github.com/Autohive-AI/autohive-integrations/tree/master/tiktok).
 
 ## Centralized API Helpers
 
@@ -107,7 +107,7 @@ Integrations that make many API calls benefit from centralizing request logic. T
 
 ### Helper Module (`helpers.py`)
 
-Used by modular integrations (Instagram, Facebook, Humanitix). Put shared constants and utility functions in a `helpers.py` file alongside the entry point:
+Used by modular integrations ([Instagram](https://github.com/Autohive-AI/autohive-integrations/tree/master/instagram), [Facebook](https://github.com/Autohive-AI/autohive-integrations/tree/master/facebook), [Humanitix](https://github.com/Autohive-AI/autohive-integrations/tree/master/humanitix)). Put shared constants and utility functions in a `helpers.py` file alongside the entry point:
 
 ```python
 # helpers.py
@@ -135,7 +135,7 @@ from helpers import BASE_URL, get_account_id
 
 ### Static API Class
 
-Used by large single-file integrations (GitHub, Zoom, YouTube). Group all API methods into a class with static methods:
+Used by large single-file integrations ([GitHub](https://github.com/Autohive-AI/autohive-integrations/tree/master/github), [Zoom](https://github.com/Autohive-AI/autohive-integrations/tree/master/zoom), [YouTube](https://github.com/Autohive-AI/autohive-integrations/tree/master/youtube)). Group all API methods into a class with static methods:
 
 ```python
 class ExampleAPI:
@@ -236,7 +236,7 @@ def get_headers(context: ExecutionContext) -> Dict[str, str]:
     }
 ```
 
-This pattern is used by integrations like Freshdesk (API key + domain), Trello (API key + token), and Google Looker (base URL + client ID + client secret).
+This pattern is used by integrations like [Freshdesk](https://github.com/Autohive-AI/autohive-integrations/tree/master/freshdesk) (API key + domain), [Trello](https://github.com/Autohive-AI/autohive-integrations/tree/master/trello) (API key + token), and [Google Looker](https://github.com/Autohive-AI/autohive-integrations/tree/master/google-looker) (base URL + client ID + client secret).
 
 ## Code Quality Conventions
 

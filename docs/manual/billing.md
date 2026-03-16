@@ -103,7 +103,7 @@ class GenerateContentAction(ActionHandler):
 ```
 ## Best Practices
 
-1. **Always return `ActionResult`** from action handlers — it is the standard return type regardless of whether billing is enabled
+1. **Always return `ActionResult`** from action handlers
 2. **Be accurate with costs** - report the actual cost incurred by the third-party API call, not an estimate
 3. **Use `0.0` for free operations** - if an action doesn't cost anything, explicitly return `cost_usd=0.0` to signal that billing is working correctly
 4. **Calculate dynamically when possible** - if the API returns usage data (e.g., tokens consumed), use it to compute the cost rather than using a fixed value

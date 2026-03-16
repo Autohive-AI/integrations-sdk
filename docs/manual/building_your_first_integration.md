@@ -406,6 +406,17 @@ async with ExecutionContext(auth=auth) as context:
 
 > **Note:** In production, the platform wraps credentials as `{"auth_type": "...", "credentials": {"api_token": "..."}}`. That's why production action handlers access `context.auth.get("credentials", {}).get("api_token")`. When testing locally with `execute_action`, the SDK validates `context.auth` directly against your `auth.fields` schema, so pass credentials flat.
 
+For **platform OAuth** integrations (where `context.fetch()` auto-injects the Bearer token), pass the full wrapped structure in tests:
+
+```python
+auth = {
+    "auth_type": "PlatformOauth2",
+    "credentials": {"access_token": "your-test-token"}
+}
+async with ExecutionContext(auth=auth) as context:
+    result = await my_integration.execute_action("list_repos", inputs, context)
+```
+
 ## Multi-File Integrations
 
 For integrations with many actions, split handlers into an `actions/` directory:

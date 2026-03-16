@@ -237,3 +237,74 @@ def get_headers(context: ExecutionContext) -> Dict[str, str]:
 ```
 
 This pattern is used by integrations like Freshdesk (API key + domain), Trello (API key + token), and Google Looker (base URL + client ID + client secret).
+
+## Code Quality Conventions
+
+### Constants and Configuration
+
+Define API base URLs, version strings, and other constants at module level:
+
+```python
+BASE_URL = "https://api.example.com/v2"
+API_VERSION = "v2"
+DEFAULT_PAGE_SIZE = 100
+```
+
+### Type Hints
+
+Add type hints to all function parameters and return types:
+
+```python
+async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
+    ...
+```
+
+### Credentials
+
+Never hardcode API keys, tokens, or secrets. Always read them from `context.auth`:
+
+```python
+# WRONG
+headers = {"Authorization": "Bearer sk-abc123"}
+
+# CORRECT
+credentials = context.auth.get("credentials", {})
+api_key = credentials.get("api_key", "")
+headers = {"Authorization": f"Bearer {api_key}"}
+```
+
+## Linting and CI
+
+Integration repos use the [autohive-integrations-tooling](https://github.com/Autohive-AI/autohive-integrations-tooling) CI pipeline. Understanding the lint configuration helps avoid common CI failures.
+
+### Ruff Rules
+
+CI runs [ruff](https://docs.astral.sh/ruff/) with rules `E` (pycodestyle errors), `F` (pyflakes), and `W` (pycodestyle warnings). Line length is 120 characters. Target version is Python 3.13.
+
+### Per-File Lint Suppressions
+
+The tooling repo's `ruff.toml` automatically suppresses certain rules for specific files:
+
+| File | Suppressed | Why |
+|------|-----------|-----|
+| `__init__.py` | `F401` (unused import) | Import-and-re-export is the expected pattern |
+| `tests/context.py` | `F401` (unused import), `E402` (import not at top of file) | The `sys.path` setup must come before the integration import |
+
+This means you **don't** need `# noqa` comments in these two files. However, if you have intentional "unused" imports in other files (e.g., re-exporting from a helpers module), you must add `# noqa: F401` inline:
+
+```python
+# helpers.py — re-exporting for convenience
+from .utils import format_date, parse_response  # noqa: F401
+```
+
+### Security Scanning
+
+CI runs [bandit](https://bandit.readthedocs.io/) for security checks. It skips rule `B101` (assert_used), so assertions in test files are fine. Common bandit flags to watch for:
+
+- `B105` / `B106` — hardcoded passwords or credentials
+- `B108` — insecure temp file usage
+- `B310` — `urllib.urlopen` with user-controlled input
+
+### Dependency Auditing
+
+CI runs `pip-audit` against your `requirements.txt` to check for known CVEs. If a dependency has a vulnerability, update to the fixed version listed in the audit output.

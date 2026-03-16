@@ -11,10 +11,10 @@ from autohive_integrations_sdk import (
 )
 from typing import Dict, Any
 
-integration = Integration.load()
+api_fetch = Integration.load()
 
 
-@integration.action("call_api")
+@api_fetch.action("call_api")
 class APIFetchAction(ActionHandler):
     """Handles simple API calls without authentication."""
 
@@ -28,7 +28,7 @@ class APIFetchAction(ActionHandler):
         )
 
 
-@integration.action("call_api_un_pw")
+@api_fetch.action("call_api_un_pw")
 class APIFetchActionBasicAuth(ActionHandler):
     """Handles API calls using Basic Authentication (username/password)."""
 
@@ -51,7 +51,7 @@ class APIFetchActionBasicAuth(ActionHandler):
         )
 
 
-@integration.action("call_api_header")
+@api_fetch.action("call_api_header")
 class APIFetchActionHeader(ActionHandler):
     """Handles API calls using header-based authentication (Bearer token)."""
 

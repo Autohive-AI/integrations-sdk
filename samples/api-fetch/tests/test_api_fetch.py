@@ -1,6 +1,6 @@
 """Test suite for the api-fetch sample integration."""
 import asyncio
-from context import integration
+from context import api_fetch
 from autohive_integrations_sdk import ExecutionContext
 
 
@@ -14,7 +14,7 @@ async def test_call_api():
     inputs = {"url": "https://httpbin.org/get"}
 
     async with ExecutionContext(auth=auth) as context:
-        result = await integration.execute_action("call_api", inputs, context)
+        result = await api_fetch.execute_action("call_api", inputs, context)
         print(f"call_api result: {result.result}")
 
 
@@ -28,7 +28,7 @@ async def test_call_api_un_pw():
     inputs = {"url": "https://httpbin.org/basic-auth/test_user/test_password"}
 
     async with ExecutionContext(auth=auth) as context:
-        result = await integration.execute_action("call_api_un_pw", inputs, context)
+        result = await api_fetch.execute_action("call_api_un_pw", inputs, context)
         print(f"call_api_un_pw result: {result.result}")
 
 
@@ -42,7 +42,7 @@ async def test_call_api_header():
     inputs = {"url": "https://httpbin.org/bearer"}
 
     async with ExecutionContext(auth=auth) as context:
-        result = await integration.execute_action("call_api_header", inputs, context)
+        result = await api_fetch.execute_action("call_api_header", inputs, context)
         print(f"call_api_header result: {result.result}")
 
 

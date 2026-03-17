@@ -23,7 +23,7 @@ class APIFetchAction(ActionHandler):
         response = await context.fetch(url)
 
         return ActionResult(
-            data=response,
+            data=response.data,
             cost_usd=0.01
         )
 
@@ -46,7 +46,7 @@ class APIFetchActionBasicAuth(ActionHandler):
         response = await context.fetch(url)
 
         return ActionResult(
-            data=response,
+            data=response.data,
             cost_usd=0.01
         )
 
@@ -65,6 +65,6 @@ class APIFetchActionHeader(ActionHandler):
         )
 
         return ActionResult(
-            data=response,
+            data=response.data,
             cost_usd=0.01
         )

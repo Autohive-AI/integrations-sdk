@@ -181,7 +181,7 @@ Required fields:
 Optional fields:
 - `scopes`: array of OAuth scopes to request
 
-With platform auth, `context.fetch()` automatically injects the `Authorization` header.
+With platform auth, `context.fetch()` automatically injects the `Authorization` header and returns a `FetchResponse` object (with `.status`, `.headers`, and `.data` attributes).
 
 #### No Auth
 

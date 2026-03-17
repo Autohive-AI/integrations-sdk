@@ -104,12 +104,13 @@ class MyConnectedAccountHandler(ConnectedAccountHandler):
         # Fetch user info from the API
         # For platform OAuth, context.fetch() auto-injects the Authorization header.
         # For custom auth, pass headers manually using context.auth.get("credentials", {}).get("api_key")
-        user_data = await context.fetch(
+        response = await context.fetch(
             "https://api.example.com/user",
             method="GET"
         )
 
         # Return ConnectedAccountInfo with available fields
+        user_data = response.data
         name = user_data.get("name", "")
         name_parts = name.split(maxsplit=1) if name else []
 
@@ -138,13 +139,14 @@ class GithubConnectedAccountHandler(ConnectedAccountHandler):
     async def get_account_info(self, context: ExecutionContext) -> ConnectedAccountInfo:
         """Fetch GitHub user information"""
         # context.fetch() auto-injects the Authorization header for platform OAuth
-        user_data = await context.fetch(
+        response = await context.fetch(
             "https://api.github.com/user",
             method="GET",
             headers={"Accept": "application/vnd.github.v3+json"}
         )
 
         # Parse name into first/last
+        user_data = response.data
         name = user_data.get("name", "")
         name_parts = name.split(maxsplit=1) if name else []
 
@@ -173,11 +175,12 @@ class LinkedInConnectedAccountHandler(ConnectedAccountHandler):
     async def get_account_info(self, context: ExecutionContext) -> ConnectedAccountInfo:
         """Fetch LinkedIn user information"""
         # context.fetch() auto-injects the Authorization header for platform OAuth
-        user_data = await context.fetch(
+        response = await context.fetch(
             "https://api.linkedin.com/v2/userinfo",
             method="GET"
         )
 
+        user_data = response.data
         return ConnectedAccountInfo(
             email=user_data.get("email"),
             first_name=user_data.get("given_name"),

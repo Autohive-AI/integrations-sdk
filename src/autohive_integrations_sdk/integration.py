@@ -18,8 +18,8 @@ Typical usage::
     @integration.action("my_action")
     class MyAction(ActionHandler):
         async def execute(self, inputs, context):
-            data = await context.fetch("https://api.example.com/resource")
-            return ActionResult(data=data)
+            response = await context.fetch("https://api.example.com/resource")
+            return ActionResult(data=response.data)
 """
 
 # Standard Library Imports
@@ -260,7 +260,7 @@ class ActionHandler(ABC):
         @integration.action("get_user")
         class GetUser(ActionHandler):
             async def execute(self, inputs, context):
-                user = await context.fetch(f"https://api.example.com/users/{inputs['id']}")
+                user = (await context.fetch(f"https://api.example.com/users/{inputs['id']}")).data
                 return ActionResult(data=user)
     """
     @abstractmethod
@@ -296,7 +296,7 @@ class ConnectedAccountHandler(ABC):
         @integration.connected_account()
         class MyAccountHandler(ConnectedAccountHandler):
             async def get_account_info(self, context):
-                me = await context.fetch("https://api.example.com/me")
+                me = (await context.fetch("https://api.example.com/me")).data
                 return ConnectedAccountInfo(
                     email=me["email"],
                     first_name=me["first_name"],

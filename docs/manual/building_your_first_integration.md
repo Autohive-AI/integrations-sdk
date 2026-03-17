@@ -223,7 +223,7 @@ class GetItemsAction(ActionHandler):
                 params={"limit": limit}
             )
 
-            items = response.get("data", [])
+            items = response.data.get("data", [])
 
             return ActionResult(
                 data={
@@ -254,7 +254,7 @@ class GetItemsAction(ActionHandler):
 **`ActionHandler`** — Base class for all action handlers. You must implement the `async def execute()` method.
 
 **`ExecutionContext`** — Provided to every handler. Gives you:
-- `context.fetch(url, ...)` — Make HTTP requests with automatic auth handling
+- `context.fetch(url, ...)` — Make HTTP requests with automatic auth handling; returns a `FetchResponse` with `.status`, `.headers`, and `.data` attributes
 - `context.auth` — Access authentication credentials
 
 **`ActionResult`** — The required return type for all action handlers. Contains:
@@ -263,7 +263,7 @@ class GetItemsAction(ActionHandler):
 
 ### Making HTTP Requests
 
-Use `context.fetch()` for all HTTP calls. It handles authentication headers, retries, timeouts, and response parsing automatically.
+Use `context.fetch()` for all HTTP calls. It handles authentication headers, retries, timeouts, and response parsing automatically. It returns a `FetchResponse` object — access the parsed body via `.data`, the HTTP status via `.status`, and response headers via `.headers`.
 
 ```python
 # GET with query parameters
@@ -272,6 +272,7 @@ response = await context.fetch(
     method="GET",
     params={"limit": 10, "status": "active"}
 )
+items = response.data  # parsed response body
 
 # POST with JSON body
 response = await context.fetch(
@@ -280,6 +281,7 @@ response = await context.fetch(
     headers={"Content-Type": "application/json"},
     json={"name": "New Item", "status": "active"}
 )
+new_item = response.data
 
 # POST with form-encoded body
 response = await context.fetch(
@@ -288,6 +290,7 @@ response = await context.fetch(
     headers={"Content-Type": "application/x-www-form-urlencoded"},
     data={"name": "New Item"}
 )
+result = response.data
 ```
 
 ### Handling Inputs

@@ -106,13 +106,18 @@ class ActionError:
 
     Args:
         message: Human-readable error message
+        cost_usd: Optional USD cost incurred before the error occurred
 
     Example:
         ```python
-        return ActionError(message="User not found")
+        return ActionError(
+            message="User not found",
+            cost_usd=0.01
+        )
         ```
     """
     message: str
+    cost_usd: Optional[float] = None
 
 @dataclass
 class ConnectedAccountInfo:

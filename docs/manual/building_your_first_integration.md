@@ -218,7 +218,10 @@ class MyActionHandler(ActionHandler):
         try:
             response = await context.fetch(url)
         except HTTPError as e:
-            return ActionError(message=f"API call failed: {e.message}")
+            return ActionError(
+                message=f"API call failed: {e.message}",
+                cost_usd=0.01  # API call was made, cost was still incurred
+            )
 
         return ActionResult(data=response)
 ```

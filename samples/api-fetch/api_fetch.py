@@ -30,7 +30,10 @@ class APIFetchAction(ActionHandler):
             response = await context.fetch(url)
         except HTTPError as e:
             # Return ActionError for expected API failures
-            return ActionError(message=f"API call failed with status {e.status}: {e.message}")
+            return ActionError(
+                message=f"API call failed with status {e.status}: {e.message}",
+                cost_usd=0.01  # API call was made, cost was incurred
+            )
 
         print("Response: ", response)
 

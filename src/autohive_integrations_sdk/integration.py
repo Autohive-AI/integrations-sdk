@@ -129,6 +129,24 @@ class RateLimitError(HTTPError):
 
 # ---- Result Classes ----
 @dataclass
+class FetchResponse:
+    """Response object returned by ``ExecutionContext.fetch()``.
+
+    Wraps the full HTTP response so callers can inspect status codes and
+    headers in addition to the parsed body.
+
+    Attributes:
+        status: HTTP status code (e.g. ``200``, ``201``).
+        headers: Response headers as a plain ``dict``.
+        data: Parsed JSON (``dict``/``list``) when the response is
+            ``application/json``, otherwise the raw response text.
+            ``None`` for empty 200/201/204 responses.
+    """
+    status: int
+    headers: Dict[str, str]
+    data: Any
+
+@dataclass
 class ActionResult:
     """Result returned by action handlers.
 
@@ -356,7 +374,7 @@ class ExecutionContext:
             content_type: Optional[str] = None,
             timeout: Optional[int] = None,
             retry_count: int = 0
-    ) -> Any:
+    ) -> FetchResponse:
         """Make an HTTP request with automatic retries and error handling.
 
         For **platform OAuth** integrations (``auth_type == "PlatformOauth2"``),
@@ -382,9 +400,8 @@ class ExecutionContext:
             retry_count: Internal — current retry attempt number.
 
         Returns:
-            Parsed JSON (``dict``/``list``) when the response is
-            ``application/json``, otherwise the raw response text.
-            Returns ``None`` for empty 200/201/204 responses.
+            A ``FetchResponse`` containing the HTTP status code, response
+            headers, and parsed body data.
 
         Raises:
             RateLimitError: On HTTP 429 with the ``Retry-After`` value.
@@ -462,16 +479,22 @@ class ExecutionContext:
                     else:
                         result = await response.text()
                         if not result and response.status in {200, 201, 204}:
-                            return None
+                            result = None
                 except Exception as e:
                     self.logger.error(f"Error parsing response: {e}")
                     result = await response.text()
+
+                response_headers = dict(response.headers)
 
                 if not response.ok:
                     print(f"HTTP error encountered. Status: {response.status}. Result: {result}")
                     raise HTTPError(response.status, str(result), result)
 
-                return result
+                return FetchResponse(
+                    status=response.status,
+                    headers=response_headers,
+                    data=result,
+                )
 
         except RateLimitError:
             raise

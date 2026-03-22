@@ -76,8 +76,10 @@ class AuthType(Enum):
 class ResultType(Enum):
     """Type of result being returned"""
     ACTION = "action"
+    ACTION_ERROR = "action_error"
     CONNECTED_ACCOUNT = "connected_account"
     ERROR = "error"
+    VALIDATION_ERROR = "validation_error"
 
 # ---- Exceptions ----
 class ValidationError(Exception):
@@ -91,13 +93,15 @@ class ValidationError(Exception):
     - An action handler returns something other than ``ActionResult``
     - A handler name isn't registered
     """
-    def __init__(self, message: str, schema: str = None, inputs: str = None):
+    def __init__(self, message: str, schema: str = None, inputs: str = None, source: str = "legacy"):
         self.schema = schema
         """The schema that failed validation"""
         self.inputs = inputs
         """The data that failed validation"""
         self.message = message
         """The error message"""
+        self.source = source
+        """Where the validation failed: 'input', 'output', or 'legacy' (pre-versioning default)"""
         super().__init__(message)
 
 class ConfigurationError(Exception):
@@ -743,7 +747,7 @@ class Integration:
             message = ""
             for error in errors:
                 message += f"{list(error.schema_path)}, {error.message},\n "
-            raise ValidationError(message, action_config.input_schema, inputs)
+            raise ValidationError(message, action_config.input_schema, inputs, source="input")
 
         if "fields" in self.config.auth:
             auth_config = self.config.auth["fields"]
@@ -753,7 +757,7 @@ class Integration:
                 message = ""
                 for error in errors:
                     message += f"{list(error.schema_path)}, {error.message},\n "
-                raise ValidationError(message, auth_config, context.auth)
+                raise ValidationError(message, auth_config, context.auth, source="input")
 
         # Create handler instance and execute
         handler = self._action_handlers[name]()
@@ -763,14 +767,15 @@ class Integration:
         if isinstance(result, ActionError):
             return IntegrationResult(
                 version=__version__,
-                type=ResultType.ERROR,
+                type=ResultType.ACTION_ERROR,
                 result=result
             )
 
         # Validate that result is ActionResult
         if not isinstance(result, ActionResult):
             raise ValidationError(
-                f"Action handler '{name}' must return ActionResult or ActionError, got {type(result).__name__}"
+                f"Action handler '{name}' must return ActionResult or ActionError, got {type(result).__name__}",
+                source="output"
             )
 
         # Validate output schema against the data inside ActionResult
@@ -780,7 +785,7 @@ class Integration:
             message = ""
             for error in errors:
                 message += f"{list(error.schema_path)}, {error.message},\n "
-            raise ValidationError(message, action_config.output_schema, result.data)
+            raise ValidationError(message, action_config.output_schema, result.data, source="output")
 
         # Return IntegrationResult with ActionResult directly
         return IntegrationResult(

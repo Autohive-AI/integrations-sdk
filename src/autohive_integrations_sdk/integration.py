@@ -729,70 +729,79 @@ class Integration:
             context: Execution context
 
         Returns:
-            IntegrationResult with action data (ResultType.ACTION) or
-            error information (ResultType.ERROR) if the handler returned ActionError
-
-        Raises:
-            ValidationError: If inputs or outputs don't match schema, or if handler
-                doesn't return ActionResult or ActionError
+            IntegrationResult with action data (ResultType.ACTION),
+            action error (ResultType.ACTION_ERROR) if the handler returned ActionError,
+            or validation error (ResultType.VALIDATION_ERROR) if schema validation fails.
         """
-        if name not in self._action_handlers:
-            raise ValidationError(f"Action '{name}' not registered")
+        try:
+            if name not in self._action_handlers:
+                raise ValidationError(f"Action '{name}' not registered")
 
-        # Validate inputs against action schema
-        action_config = self.config.actions[name]
-        validator = Draft7Validator(action_config.input_schema)
-        errors = sorted(validator.iter_errors(inputs), key=lambda e: e.path)
-        if errors:
-            message = ""
-            for error in errors:
-                message += f"{list(error.schema_path)}, {error.message},\n "
-            raise ValidationError(message, action_config.input_schema, inputs, source="input")
-
-        if "fields" in self.config.auth:
-            auth_config = self.config.auth["fields"]
-            validator = Draft7Validator(auth_config)
-            errors = sorted(validator.iter_errors(context.auth), key=lambda e: e.path)
+            # Validate inputs against action schema
+            action_config = self.config.actions[name]
+            validator = Draft7Validator(action_config.input_schema)
+            errors = sorted(validator.iter_errors(inputs), key=lambda e: e.path)
             if errors:
                 message = ""
                 for error in errors:
                     message += f"{list(error.schema_path)}, {error.message},\n "
-                raise ValidationError(message, auth_config, context.auth, source="input")
+                raise ValidationError(message, action_config.input_schema, inputs, source="input")
 
-        # Create handler instance and execute
-        handler = self._action_handlers[name]()
-        result = await handler.execute(inputs, context)
+            if "fields" in self.config.auth:
+                auth_config = self.config.auth["fields"]
+                validator = Draft7Validator(auth_config)
+                errors = sorted(validator.iter_errors(context.auth), key=lambda e: e.path)
+                if errors:
+                    message = ""
+                    for error in errors:
+                        message += f"{list(error.schema_path)}, {error.message},\n "
+                    raise ValidationError(message, auth_config, context.auth, source="input")
 
-        # Handle ActionError - skip output schema validation
-        if isinstance(result, ActionError):
+            # Create handler instance and execute
+            handler = self._action_handlers[name]()
+            result = await handler.execute(inputs, context)
+
+            # Handle ActionError - skip output schema validation
+            if isinstance(result, ActionError):
+                return IntegrationResult(
+                    version=__version__,
+                    type=ResultType.ACTION_ERROR,
+                    result=result
+                )
+
+            # Validate that result is ActionResult
+            if not isinstance(result, ActionResult):
+                raise ValidationError(
+                    f"Action handler '{name}' must return ActionResult or ActionError, got {type(result).__name__}",
+                    source="output"
+                )
+
+            # Validate output schema against the data inside ActionResult
+            validator = Draft7Validator(action_config.output_schema)
+            errors = sorted(validator.iter_errors(result.data), key=lambda e: e.path)
+            if errors:
+                message = ""
+                for error in errors:
+                    message += f"{list(error.schema_path)}, {error.message},\n "
+                raise ValidationError(message, action_config.output_schema, result.data, source="output")
+
+            # Return IntegrationResult with ActionResult directly
             return IntegrationResult(
                 version=__version__,
-                type=ResultType.ACTION_ERROR,
+                type=ResultType.ACTION,
                 result=result
             )
-
-        # Validate that result is ActionResult
-        if not isinstance(result, ActionResult):
-            raise ValidationError(
-                f"Action handler '{name}' must return ActionResult or ActionError, got {type(result).__name__}",
-                source="output"
+        except ValidationError as e:
+            return IntegrationResult(
+                version=__version__,
+                type=ResultType.VALIDATION_ERROR,
+                result={
+                    'message': str(e),
+                    'property': None,
+                    'value': None,
+                    'source': getattr(e, 'source', 'legacy')
+                }
             )
-
-        # Validate output schema against the data inside ActionResult
-        validator = Draft7Validator(action_config.output_schema)
-        errors = sorted(validator.iter_errors(result.data), key=lambda e: e.path)
-        if errors:
-            message = ""
-            for error in errors:
-                message += f"{list(error.schema_path)}, {error.message},\n "
-            raise ValidationError(message, action_config.output_schema, result.data, source="output")
-
-        # Return IntegrationResult with ActionResult directly
-        return IntegrationResult(
-            version=__version__,
-            type=ResultType.ACTION,
-            result=result
-        )
 
     async def execute_polling_trigger(self,
                                     name: str,

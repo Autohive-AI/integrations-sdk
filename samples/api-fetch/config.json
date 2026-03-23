@@ -1,15 +1,15 @@
 {
-    "name": "API Fetch Tester",
+    "name": "api-fetch",
     "version": "1.0.0",
-    "description": "A simple integration for testing API calls and authentication.",
+    "display_name": "API Fetch Tester",
+    "description": "A sample integration demonstrating API calls with different authentication methods.",
     "entry_point": "api_fetch.py",
     "supports_billing": true,
-    "supports_connected_account": true,
     "auth": {
-        "identifier": "api_fetch_authentication",
         "type": "custom",
+        "title": "API Authentication",
         "fields": {
-            "type":"object",
+            "type": "object",
             "properties": {
                 "user_name": {
                     "type": "string",
@@ -25,7 +25,7 @@
                 },
                 "api_key": {
                     "type": "string",
-                    "format": "text",
+                    "format": "password",
                     "label": "API Key",
                     "help_text": "You'll get this from the API provider."
                 }
@@ -39,7 +39,8 @@
     },
     "actions": {
         "call_api": {
-            "description": "Call an API.",
+            "display_name": "Call API",
+            "description": "Call an API without authentication.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -48,9 +49,7 @@
                         "description": "The URL of the API to call."
                     }
                 },
-                "required": [
-                    "url"
-                ]
+                "required": ["url"]
             },
             "output_schema": {
                 "type": "object",
@@ -59,14 +58,12 @@
                         "type": "object",
                         "description": "The data returned from the API call."
                     }
-                },
-                "required": [
-                    "data"
-                ]
+                }
             }
         },
         "call_api_un_pw": {
-            "description": "Call an API with user name/password authentication.",
+            "display_name": "Call API (Basic Auth)",
+            "description": "Call an API with username/password authentication.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -75,9 +72,7 @@
                         "description": "The URL of the API to call."
                     }
                 },
-                "required": [
-                    "url"
-                ]
+                "required": ["url"]
             },
             "output_schema": {
                 "type": "object",
@@ -86,14 +81,12 @@
                         "type": "object",
                         "description": "The data returned from the API call."
                     }
-                },
-                "required": [
-                    "data"
-                ]
+                }
             }
         },
         "call_api_header": {
-            "description": "Call an API with a header.",
+            "display_name": "Call API (Header Auth)",
+            "description": "Call an API with header-based authentication.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -102,9 +95,7 @@
                         "description": "The URL of the API to call."
                     }
                 },
-                "required": [
-                    "url"
-                ]
+                "required": ["url"]
             },
             "output_schema": {
                 "type": "object",
@@ -113,10 +104,7 @@
                         "type": "object",
                         "description": "The data returned from the API call."
                     }
-                },
-                "required": [
-                    "data"
-                ]
+                }
             }
         }
     }

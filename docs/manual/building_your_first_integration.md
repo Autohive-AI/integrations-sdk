@@ -118,7 +118,7 @@ For public APIs that don't require authentication:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Integration identifier (lowercase) |
+| `name` | string | Integration name |
 | `version` | string | Semantic version (`MAJOR.MINOR.PATCH`) |
 | `description` | string | What the integration does |
 | `entry_point` | string | Main Python file name (must end in `.py`) |

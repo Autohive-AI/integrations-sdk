@@ -92,7 +92,7 @@ Add any additional libraries your integration needs (e.g., `feedparser`, `stripe
 | Directory name | lowercase, hyphens | `my-integration`, `google-sheets` |
 | Python module | lowercase, underscores | `my_integration.py`, `google_sheets.py` |
 | Action names | snake_case | `list_items`, `create_record` |
-| `config.json` `name` | lowercase, hyphens | `my-integration` |
+| `config.json` `name` | human-readable name | `My Integration` |
 
 ## `config.json` Schema
 
@@ -102,7 +102,7 @@ Add any additional libraries your integration needs (e.g., `feedparser`, `stripe
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Integration identifier (lowercase) |
+| `name` | string | Integration name |
 | `version` | string | Semantic version (`MAJOR.MINOR.PATCH`, e.g., `"1.0.0"`) |
 | `description` | string | What the integration does |
 | `entry_point` | string | Main Python file name (e.g., `"my_integration.py"`) |

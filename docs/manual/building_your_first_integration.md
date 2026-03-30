@@ -128,7 +128,7 @@ For public APIs that don't require authentication:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `display_name` | string | Human-readable name for the UI |
+| `display_name` | string | Human-readable name for the UI (recommended) |
 | `auth` | object | Authentication configuration (see [Authentication](#authentication)) |
 | `supports_billing` | boolean | Enable cost tracking via `ActionResult.cost_usd` (see [billing docs](billing.md)) |
 | `supports_connected_account` | boolean | Enable connected account display (see [connected account docs](connected_account.md)) |

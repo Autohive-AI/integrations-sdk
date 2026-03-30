@@ -1,5 +1,10 @@
 # Release Notes
 
+## 1.1.0
+- Add ActionError for expected application-level errors
+- Documentation improvements: unified integration docs, billing/cost tracking manual, code quality conventions, integration callouts linked to source code
+- Removed name-folder match rule, mark display_name as recommended
+
 ## 1.0.2
 - Removed raygun4py dependency
 

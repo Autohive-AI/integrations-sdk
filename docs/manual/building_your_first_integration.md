@@ -118,7 +118,7 @@ For public APIs that don't require authentication:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Integration identifier (lowercase) |
+| `name` | string | Integration name |
 | `version` | string | Semantic version (`MAJOR.MINOR.PATCH`) |
 | `description` | string | What the integration does |
 | `entry_point` | string | Main Python file name (must end in `.py`) |
@@ -128,7 +128,7 @@ For public APIs that don't require authentication:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `display_name` | string | Human-readable name for the UI |
+| `display_name` | string | Human-readable name for the UI (recommended) |
 | `auth` | object | Authentication configuration (see [Authentication](#authentication)) |
 | `supports_billing` | boolean | Enable cost tracking via `ActionResult.cost_usd` (see [billing docs](billing.md)) |
 | `supports_connected_account` | boolean | Enable connected account display (see [connected account docs](connected_account.md)) |

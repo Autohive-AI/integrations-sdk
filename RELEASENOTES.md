@@ -1,5 +1,10 @@
 # Release Notes
 
+## 1.1.1
+- Export HTTPError and RateLimitError from package for direct import
+- Added PyPI-optimised README with absolute links and best practices
+- Documentation: updated SDK version pins and compatible release ranges
+
 ## 1.1.0
 - Add ActionError for expected application-level errors
 - Documentation improvements: unified integration docs, billing/cost tracking manual, code quality conventions, integration callouts linked to source code

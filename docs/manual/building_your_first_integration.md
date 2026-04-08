@@ -44,10 +44,10 @@ cd my-integration
 Create a `requirements.txt`:
 
 ```
-autohive-integrations-sdk~=1.0.2
+autohive-integrations-sdk~=1.1.1
 ```
 
-The `~=` (compatible release) operator means `>=1.0.2, <1.1.0` — you'll get patch updates with bug fixes, but won't be surprised by minor version changes that could alter SDK behaviour.
+The `~=` (compatible release) operator means `>=1.1.1, <1.2.0` — you'll get patch updates with bug fixes, but won't be surprised by minor version changes that could alter SDK behaviour.
 
 Add any additional libraries your integration needs beyond the SDK (e.g., `feedparser` for RSS parsing, `stripe` for the Stripe client library).
 

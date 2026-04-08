@@ -78,10 +78,10 @@ In this pattern:
 Must include the SDK with a compatible release pin:
 
 ```
-autohive-integrations-sdk~=1.0.2
+autohive-integrations-sdk~=1.1.1
 ```
 
-The `~=` operator means `>=1.0.2, <1.1.0` — you get patch updates but not minor version changes.
+The `~=` operator means `>=1.1.1, <1.2.0` — you get patch updates but not minor version changes.
 
 Add any additional libraries your integration needs (e.g., `feedparser`, `stripe`).
 

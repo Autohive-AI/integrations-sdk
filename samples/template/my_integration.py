@@ -25,4 +25,4 @@ class MyAction(ActionHandler):
             headers={"Authorization": f"Bearer {api_key}"}
         )
 
-        return ActionResult(data=response)
+        return ActionResult(data=response.data)

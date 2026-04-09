@@ -62,7 +62,7 @@ class CallApiAction(ActionHandler):
         response = await context.fetch(url, headers={"Authorization": f"Bearer {api_key}"})
 
         return ActionResult(
-            data={"result": response},
+            data={"result": response.data},
             cost_usd=0.05
         )
 ```
@@ -93,11 +93,11 @@ class GenerateContentAction(ActionHandler):
         )
 
         # Calculate cost based on usage returned by the API
-        tokens_used = response.get("usage", {}).get("total_tokens", 0)
+        tokens_used = response.data.get("usage", {}).get("total_tokens", 0)
         cost = tokens_used * 0.00001  # $0.01 per 1000 tokens
 
         return ActionResult(
-            data={"content": response["result"]},
+            data={"content": response.data["result"]},
             cost_usd=cost
         )
 ```

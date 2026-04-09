@@ -29,7 +29,7 @@ class FetchData(ActionHandler):
             "https://api.example.com/data",
             headers={"Authorization": f"Bearer {context.auth['api_key']}"}
         )
-        return ActionResult(data=response)
+        return ActionResult(data=response.data)
 ```
 
 ## Key Features

@@ -7,7 +7,10 @@ Provides the building blocks for creating Autohive integrations:
 - `ActionHandler` — base class for action implementations (return `ActionResult`)
 - `ConnectedAccountHandler` — base class for connected-account lookups (return `ConnectedAccountInfo`)
 - `ActionResult` — standard return type wrapping action output data and optional billing cost
+- `ActionError` — return type for expected application-level errors (bypasses output schema validation)
+- `FetchResponse` — response object from ``context.fetch()`` with ``.status``, ``.headers``, and ``.data``
 - `ConnectedAccountInfo` — structured account info returned by connected-account handlers
+- `HTTPError` / `RateLimitError` — exceptions raised by ``context.fetch()`` for non-2xx responses
 
 Typical usage::
 
@@ -18,8 +21,8 @@ Typical usage::
     @integration.action("my_action")
     class MyAction(ActionHandler):
         async def execute(self, inputs, context):
-            data = await context.fetch("https://api.example.com/resource")
-            return ActionResult(data=data)
+            response = await context.fetch("https://api.example.com/resource")
+            return ActionResult(data=response.data)
 """
 
 # Standard Library Imports
@@ -132,6 +135,24 @@ class RateLimitError(HTTPError):
         super().__init__(*args, **kwargs)
 
 # ---- Result Classes ----
+@dataclass
+class FetchResponse:
+    """Response object returned by ``ExecutionContext.fetch()``.
+
+    Wraps the full HTTP response so callers can inspect status codes and
+    headers in addition to the parsed body.
+
+    Attributes:
+        status: HTTP status code (e.g. ``200``, ``201``).
+        headers: Response headers as a plain ``dict``.
+        data: Parsed JSON (``dict``/``list``) when the response is
+            ``application/json``, otherwise the raw response text.
+            ``None`` for empty 200/201/204 responses.
+    """
+    status: int
+    headers: Dict[str, str]
+    data: Any
+
 @dataclass
 class ActionResult:
     """Result returned by action handlers.
@@ -270,7 +291,7 @@ class ActionHandler(ABC):
         @integration.action("get_user")
         class GetUser(ActionHandler):
             async def execute(self, inputs, context):
-                user = await context.fetch(f"https://api.example.com/users/{inputs['id']}")
+                user = (await context.fetch(f"https://api.example.com/users/{inputs['id']}")).data
                 return ActionResult(data=user)
     """
     @abstractmethod
@@ -306,7 +327,7 @@ class ConnectedAccountHandler(ABC):
         @integration.connected_account()
         class MyAccountHandler(ConnectedAccountHandler):
             async def get_account_info(self, context):
-                me = await context.fetch("https://api.example.com/me")
+                me = (await context.fetch("https://api.example.com/me")).data
                 return ConnectedAccountInfo(
                     email=me["email"],
                     first_name=me["first_name"],
@@ -384,7 +405,7 @@ class ExecutionContext:
             content_type: Optional[str] = None,
             timeout: Optional[int] = None,
             retry_count: int = 0
-    ) -> Any:
+    ) -> FetchResponse:
         """Make an HTTP request with automatic retries and error handling.
 
         For **platform OAuth** integrations (``auth_type == "PlatformOauth2"``),
@@ -410,9 +431,8 @@ class ExecutionContext:
             retry_count: Internal — current retry attempt number.
 
         Returns:
-            Parsed JSON (``dict``/``list``) when the response is
-            ``application/json``, otherwise the raw response text.
-            Returns ``None`` for empty 200/201/204 responses.
+            A ``FetchResponse`` containing the HTTP status code, response
+            headers, and parsed body data.
 
         Raises:
             RateLimitError: On HTTP 429 with the ``Retry-After`` value.
@@ -490,16 +510,22 @@ class ExecutionContext:
                     else:
                         result = await response.text()
                         if not result and response.status in {200, 201, 204}:
-                            return None
+                            result = None
                 except Exception as e:
                     self.logger.error(f"Error parsing response: {e}")
                     result = await response.text()
+
+                response_headers = dict(response.headers)
 
                 if not response.ok:
                     print(f"HTTP error encountered. Status: {response.status}. Result: {result}")
                     raise HTTPError(response.status, str(result), result)
 
-                return result
+                return FetchResponse(
+                    status=response.status,
+                    headers=response_headers,
+                    data=result,
+                )
 
         except RateLimitError:
             raise

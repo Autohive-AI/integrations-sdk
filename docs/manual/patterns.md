@@ -24,7 +24,7 @@ class ListItemsAction(ActionHandler):
                 params=params
             )
 
-            items = response if isinstance(response, list) else response.get("data", [])
+            items = response.data if isinstance(response.data, list) else response.data.get("data", [])
             if not items:
                 break
 
@@ -62,10 +62,10 @@ class ListProjectsAction(ActionHandler):
                 params=params
             )
 
-            data = response.get("data", [])
+            data = response.data.get("data", [])
             all_projects.extend(data)
 
-            next_page = response.get("next_page")
+            next_page = response.data.get("next_page")
             if next_page and next_page.get("offset"):
                 offset = next_page["offset"]
             else:
@@ -93,9 +93,9 @@ class ListVideosAction(ActionHandler):
         response = await context.fetch(f"{BASE_URL}/videos", method="POST", json=request_body)
 
         return ActionResult(data={
-            "videos": response.get("videos", []),
-            "cursor": response.get("cursor"),
-            "has_more": response.get("has_more", False),
+            "videos": response.data.get("videos", []),
+            "cursor": response.data.get("cursor"),
+            "has_more": response.data.get("has_more", False),
         })
 ```
 
@@ -120,7 +120,7 @@ BASE_URL = f"https://api.example.com/{API_VERSION}"
 async def get_account_id(context: ExecutionContext) -> str:
     """Fetch the authenticated user's account ID."""
     response = await context.fetch(f"{BASE_URL}/me", method="GET")
-    account_id = response.get("id")
+    account_id = response.data.get("id")
     if not account_id:
         raise Exception("Failed to retrieve account ID")
     return account_id
@@ -164,7 +164,7 @@ class ExampleAPI:
 
         while True:
             response = await context.fetch(url, params=params, headers=headers)
-            items = response if isinstance(response, list) else []
+            items = response.data if isinstance(response.data, list) else []
             if not items:
                 break
             all_items.extend(items)

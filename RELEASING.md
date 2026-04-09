@@ -32,7 +32,14 @@
     * Building wheel...
     Successfully built autohive_integrations_sdk-<a.b.c>.tar.gz and autohive_integrations_sdk-<a.b.c>-py3-none-any.whl
     ```
-    Upload:
+* Regenerate API docs:
+    - `pdoc` is required (`python3 -m pip install --upgrade pdoc`)
+    ```
+    pdoc -o docs/apidocs src/autohive_integrations_sdk
+    ```
+    - Commit the updated `docs/apidocs/` files — these are tracked in version control.
+
+* Release to PyPi — Upload:
     ```
     # Upload to PyPi, use API token from our secrets management
     python3 -m twine upload dist/autohive_integrations_sdk-<a.b.c>*

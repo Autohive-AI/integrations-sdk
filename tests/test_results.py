@@ -11,6 +11,7 @@ from autohive_integrations_sdk import (
     ValidationError,
     HTTPError,
     RateLimitError,
+    FetchResponse,
 )
 from autohive_integrations_sdk.integration import AuthType
 
@@ -127,3 +128,24 @@ def test_auth_type_enum():
     assert AuthType.ApiKey.value == "ApiKey"
     assert AuthType.Basic.value == "Basic"
     assert AuthType.Custom.value == "Custom"
+
+
+# ── FetchResponse ───────────────────────────────────────────────────────────
+
+
+def test_fetch_response_json():
+    r = FetchResponse(status=200, headers={"Content-Type": "application/json"}, data={"ok": True})
+    assert r.status == 200
+    assert r.data == {"ok": True}
+    assert r.headers["Content-Type"] == "application/json"
+
+
+def test_fetch_response_none_data():
+    r = FetchResponse(status=204, headers={}, data=None)
+    assert r.status == 204
+    assert r.data is None
+
+
+def test_fetch_response_text_data():
+    r = FetchResponse(status=200, headers={"Content-Type": "text/plain"}, data="hello")
+    assert r.data == "hello"

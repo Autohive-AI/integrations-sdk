@@ -34,6 +34,7 @@ async def test_fetch_get_json(mock_aio):
 
     assert data.data == {"ok": True}
     assert data.status == 200
+    assert "Content-Type" in data.headers
 
 
 async def test_fetch_post_json(mock_aio):

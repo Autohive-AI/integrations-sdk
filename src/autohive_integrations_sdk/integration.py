@@ -7,7 +7,10 @@ Provides the building blocks for creating Autohive integrations:
 - `ActionHandler` — base class for action implementations (return `ActionResult`)
 - `ConnectedAccountHandler` — base class for connected-account lookups (return `ConnectedAccountInfo`)
 - `ActionResult` — standard return type wrapping action output data and optional billing cost
+- `ActionError` — return type for expected application-level errors (bypasses output schema validation)
+- `FetchResponse` — response object from ``context.fetch()`` with ``.status``, ``.headers``, and ``.data``
 - `ConnectedAccountInfo` — structured account info returned by connected-account handlers
+- `HTTPError` / `RateLimitError` — exceptions raised by ``context.fetch()`` for non-2xx responses
 
 Typical usage::
 

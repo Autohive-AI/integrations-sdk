@@ -328,7 +328,7 @@ class MyActionHandler(ActionHandler):
                 cost_usd=0.01  # API call was made, cost was still incurred
             )
 
-        return ActionResult(data=response)
+        return ActionResult(data=response.data)
 ```
 
 Use `ActionError` for expected, application-level failures. For unexpected infrastructure errors, let exceptions propagate normally.

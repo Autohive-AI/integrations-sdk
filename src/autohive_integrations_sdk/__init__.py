@@ -5,5 +5,5 @@ __version__ = "1.1.1"
 from autohive_integrations_sdk.integration import (
     Integration, ExecutionContext, ActionHandler, PollingTriggerHandler, ConnectedAccountHandler,
     ConnectedAccountInfo, ValidationError, HTTPError, RateLimitError, 
-    ActionResult, IntegrationResult, ResultType, FetchResponse
+    ActionResult, ActionError, IntegrationResult, ResultType, FetchResponse
 )

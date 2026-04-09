@@ -78,10 +78,10 @@ In this pattern:
 Must include the SDK with a compatible release pin:
 
 ```
-autohive-integrations-sdk~=1.0.2
+autohive-integrations-sdk~=1.1.1
 ```
 
-The `~=` operator means `>=1.0.2, <1.1.0` — you get patch updates but not minor version changes.
+The `~=` operator means `>=1.1.1, <1.2.0` — you get patch updates but not minor version changes.
 
 Add any additional libraries your integration needs (e.g., `feedparser`, `stripe`).
 
@@ -92,9 +92,7 @@ Add any additional libraries your integration needs (e.g., `feedparser`, `stripe
 | Directory name | lowercase, hyphens | `my-integration`, `google-sheets` |
 | Python module | lowercase, underscores | `my_integration.py`, `google_sheets.py` |
 | Action names | snake_case | `list_items`, `create_record` |
-| `config.json` `name` | must match directory name (hyphens/underscores normalized) | `my-integration` |
-
-The tooling validates that the `name` field in `config.json` matches the directory name.
+| `config.json` `name` | human-readable name | `My Integration` |
 
 ## `config.json` Schema
 
@@ -104,7 +102,7 @@ The tooling validates that the `name` field in `config.json` matches the directo
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Integration identifier (lowercase, matches directory name) |
+| `name` | string | Integration name |
 | `version` | string | Semantic version (`MAJOR.MINOR.PATCH`, e.g., `"1.0.0"`) |
 | `description` | string | What the integration does |
 | `entry_point` | string | Main Python file name (e.g., `"my_integration.py"`) |
@@ -114,7 +112,7 @@ The tooling validates that the `name` field in `config.json` matches the directo
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `display_name` | string | Human-readable name for the UI |
+| `display_name` | string | Human-readable name for the UI (recommended) |
 | `auth` | object | Authentication configuration (omit for public APIs) |
 | `supports_billing` | boolean | Enable cost tracking via `ActionResult.cost_usd` (see [billing docs](billing.md)) |
 | `supports_connected_account` | boolean | Enable connected account display (see [connected account docs](connected_account.md)) |

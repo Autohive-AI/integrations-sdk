@@ -44,10 +44,10 @@ cd my-integration
 Create a `requirements.txt`:
 
 ```
-autohive-integrations-sdk~=1.0.2
+autohive-integrations-sdk~=1.1.1
 ```
 
-The `~=` (compatible release) operator means `>=1.0.2, <1.1.0` — you'll get patch updates with bug fixes, but won't be surprised by minor version changes that could alter SDK behaviour.
+The `~=` (compatible release) operator means `>=1.1.1, <1.2.0` — you'll get patch updates with bug fixes, but won't be surprised by minor version changes that could alter SDK behaviour.
 
 Add any additional libraries your integration needs beyond the SDK (e.g., `feedparser` for RSS parsing, `stripe` for the Stripe client library).
 
@@ -118,7 +118,7 @@ For public APIs that don't require authentication:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Integration identifier (lowercase) |
+| `name` | string | Integration name |
 | `version` | string | Semantic version (`MAJOR.MINOR.PATCH`) |
 | `description` | string | What the integration does |
 | `entry_point` | string | Main Python file name (must end in `.py`) |
@@ -128,7 +128,7 @@ For public APIs that don't require authentication:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `display_name` | string | Human-readable name for the UI |
+| `display_name` | string | Human-readable name for the UI (recommended) |
 | `auth` | object | Authentication configuration (see [Authentication](#authentication)) |
 | `supports_billing` | boolean | Enable cost tracking via `ActionResult.cost_usd` (see [billing docs](billing.md)) |
 | `supports_connected_account` | boolean | Enable connected account display (see [connected account docs](connected_account.md)) |
@@ -309,6 +309,29 @@ email = inputs.get("email")
 if email:
     body["email"] = email
 ```
+
+### Returning Errors from Actions
+
+Action handlers normally return an `ActionResult` whose `data` is validated against the action's `output_schema`. When your action encounters an expected error condition (e.g. a resource not found, an API quota exceeded), you can return an `ActionError` instead. This bypasses output schema validation and returns the error message to the caller:
+
+```python
+from autohive_integrations_sdk import ActionError, HTTPError
+
+@my_integration.action("my_action_handler")
+class MyActionHandler(ActionHandler):
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext):
+        try:
+            response = await context.fetch(url)
+        except HTTPError as e:
+            return ActionError(
+                message=f"API call failed: {e.message}",
+                cost_usd=0.01  # API call was made, cost was still incurred
+            )
+
+        return ActionResult(data=response)
+```
+
+Use `ActionError` for expected, application-level failures. For unexpected infrastructure errors, let exceptions propagate normally.
 
 ### Handler Class Naming
 

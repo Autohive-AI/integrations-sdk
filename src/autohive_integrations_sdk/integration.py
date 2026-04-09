@@ -76,8 +76,10 @@ class AuthType(Enum):
 class ResultType(Enum):
     """Type of result being returned"""
     ACTION = "action"
+    ACTION_ERROR = "action_error"
     CONNECTED_ACCOUNT = "connected_account"
     ERROR = "error"
+    VALIDATION_ERROR = "validation_error"
 
 # ---- Exceptions ----
 class ValidationError(Exception):
@@ -91,13 +93,15 @@ class ValidationError(Exception):
     - An action handler returns something other than ``ActionResult``
     - A handler name isn't registered
     """
-    def __init__(self, message: str, schema: str = None, inputs: str = None):
+    def __init__(self, message: str, schema: str = None, inputs: str = None, source: str = "legacy"):
         self.schema = schema
         """The schema that failed validation"""
         self.inputs = inputs
         """The data that failed validation"""
         self.message = message
         """The error message"""
+        self.source = source
+        """Where the validation failed: 'input', 'output', or 'legacy' (pre-versioning default)"""
         super().__init__(message)
 
 class ConfigurationError(Exception):
@@ -169,6 +173,28 @@ class ActionResult:
     cost_usd: Optional[float] = None
 
 @dataclass
+class ActionError:
+    """Error result returned by action handlers for expected/application-level errors.
+
+    When returned from an action handler, output schema validation is skipped
+    and the error is returned to the caller as a ResultType.ERROR result.
+
+    Args:
+        message: Human-readable error message
+        cost_usd: Optional USD cost incurred before the error occurred
+
+    Example:
+        ```python
+        return ActionError(
+            message="User not found",
+            cost_usd=0.01
+        )
+        ```
+    """
+    message: str
+    cost_usd: Optional[float] = None
+
+@dataclass
 class ConnectedAccountInfo:
     """Account metadata returned by a ``ConnectedAccountHandler``.
 
@@ -196,17 +222,19 @@ class IntegrationResult:
     Args:
         version: SDK version (auto-populated)
         type: Type of result payload (ResultType enum: ACTION, CONNECTED_ACCOUNT, ERROR)
-        result: The result object - ActionResult for actions or
-                ConnectedAccountInfo for connected accounts.
+        result: The result object - ActionResult for actions, ActionError for
+                application-level action errors, or ConnectedAccountInfo for
+                connected accounts.
                 The lambda wrapper serializes these to dicts using asdict().
 
     Note:
         This type is returned by Integration methods and serialized by the lambda wrapper.
-        Integration developers should use ActionResult for action handlers.
+        Integration developers should use ActionResult for action handlers and
+        ActionError for expected error conditions.
     """
     version: str
     type: ResultType
-    result: Union[ActionResult, ConnectedAccountInfo]
+    result: Union[ActionResult, ActionError, ConnectedAccountInfo]
 
 # ---- Configuration Classes ----
 
@@ -724,59 +752,79 @@ class Integration:
             context: Execution context
 
         Returns:
-            IntegrationResult with action data and optional billing information
-
-        Raises:
-            ValidationError: If inputs or outputs don't match schema, or if handler doesn't return ActionResult
+            IntegrationResult with action data (ResultType.ACTION),
+            action error (ResultType.ACTION_ERROR) if the handler returned ActionError,
+            or validation error (ResultType.VALIDATION_ERROR) if schema validation fails.
         """
-        if name not in self._action_handlers:
-            raise ValidationError(f"Action '{name}' not registered")
+        try:
+            if name not in self._action_handlers:
+                raise ValidationError(f"Action '{name}' not registered")
 
-        # Validate inputs against action schema
-        action_config = self.config.actions[name]
-        validator = Draft7Validator(action_config.input_schema)
-        errors = sorted(validator.iter_errors(inputs), key=lambda e: e.path)
-        if errors:
-            message = ""
-            for error in errors:
-                message += f"{list(error.schema_path)}, {error.message},\n "
-            raise ValidationError(message, action_config.input_schema, inputs)
-
-        if "fields" in self.config.auth:
-            auth_config = self.config.auth["fields"]
-            validator = Draft7Validator(auth_config)
-            errors = sorted(validator.iter_errors(context.auth), key=lambda e: e.path)
+            # Validate inputs against action schema
+            action_config = self.config.actions[name]
+            validator = Draft7Validator(action_config.input_schema)
+            errors = sorted(validator.iter_errors(inputs), key=lambda e: e.path)
             if errors:
                 message = ""
                 for error in errors:
                     message += f"{list(error.schema_path)}, {error.message},\n "
-                raise ValidationError(message, auth_config, context.auth)
+                raise ValidationError(message, action_config.input_schema, inputs, source="input")
 
-        # Create handler instance and execute
-        handler = self._action_handlers[name]()
-        result = await handler.execute(inputs, context)
+            if "fields" in self.config.auth:
+                auth_config = self.config.auth["fields"]
+                validator = Draft7Validator(auth_config)
+                errors = sorted(validator.iter_errors(context.auth), key=lambda e: e.path)
+                if errors:
+                    message = ""
+                    for error in errors:
+                        message += f"{list(error.schema_path)}, {error.message},\n "
+                    raise ValidationError(message, auth_config, context.auth, source="input")
 
-        # Validate that result is ActionResult
-        if not isinstance(result, ActionResult):
-            raise ValidationError(
-                f"Action handler '{name}' must return ActionResult, got {type(result).__name__}"
+            # Create handler instance and execute
+            handler = self._action_handlers[name]()
+            result = await handler.execute(inputs, context)
+
+            # Handle ActionError - skip output schema validation
+            if isinstance(result, ActionError):
+                return IntegrationResult(
+                    version=__version__,
+                    type=ResultType.ACTION_ERROR,
+                    result=result
+                )
+
+            # Validate that result is ActionResult
+            if not isinstance(result, ActionResult):
+                raise ValidationError(
+                    f"Action handler '{name}' must return ActionResult or ActionError, got {type(result).__name__}",
+                    source="output"
+                )
+
+            # Validate output schema against the data inside ActionResult
+            validator = Draft7Validator(action_config.output_schema)
+            errors = sorted(validator.iter_errors(result.data), key=lambda e: e.path)
+            if errors:
+                message = ""
+                for error in errors:
+                    message += f"{list(error.schema_path)}, {error.message},\n "
+                raise ValidationError(message, action_config.output_schema, result.data, source="output")
+
+            # Return IntegrationResult with ActionResult directly
+            return IntegrationResult(
+                version=__version__,
+                type=ResultType.ACTION,
+                result=result
             )
-
-        # Validate output schema against the data inside ActionResult
-        validator = Draft7Validator(action_config.output_schema)
-        errors = sorted(validator.iter_errors(result.data), key=lambda e: e.path)
-        if errors:
-            message = ""
-            for error in errors:
-                message += f"{list(error.schema_path)}, {error.message},\n "
-            raise ValidationError(message, action_config.output_schema, result.data)
-
-        # Return IntegrationResult with ActionResult directly
-        return IntegrationResult(
-            version=__version__,
-            type=ResultType.ACTION,
-            result=result
-        )
+        except ValidationError as e:
+            return IntegrationResult(
+                version=__version__,
+                type=ResultType.VALIDATION_ERROR,
+                result={
+                    'message': str(e),
+                    'property': None,
+                    'value': None,
+                    'source': getattr(e, 'source', 'legacy')
+                }
+            )
 
     async def execute_polling_trigger(self,
                                     name: str,

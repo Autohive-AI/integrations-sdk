@@ -1,0 +1,101 @@
+{
+    "name": "action-error-demo",
+    "version": "1.0.0",
+    "display_name": "Action Error Demo",
+    "description": "Demonstrates the three result types from action handlers: ActionResult, ActionError, and unhandled exceptions.",
+    "entry_point": "action_error_demo.py",
+    "supports_billing": true,
+    "auth": {
+        "type": "none"
+    },
+    "actions": {
+        "get_user": {
+            "display_name": "Get User",
+            "description": "Returns user data for user_id '1' or '2'. Any other value throws an unhandled exception (infrastructure error path).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "string",
+                        "description": "The user ID to fetch. Use '1' or '2' for success."
+                    }
+                },
+                "required": ["user_id"]
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "name": { "type": "string" },
+                    "email": { "type": "string" }
+                }
+            }
+        },
+        "get_user_billing": {
+            "display_name": "Get User (with Billing)",
+            "description": "Returns user data with a cost_usd billing charge. Use '1' or '2' for success.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "string",
+                        "description": "The user ID to fetch. Use '1' or '2' for success."
+                    }
+                },
+                "required": ["user_id"]
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "name": { "type": "string" },
+                    "email": { "type": "string" }
+                }
+            }
+        },
+        "lookup_user": {
+            "display_name": "Lookup User",
+            "description": "Returns ActionError for unknown user IDs instead of throwing. Use '1' or '2' for success; any other value returns an ActionError the agent can read.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "string",
+                        "description": "The user ID to look up. Use '1' or '2' for success; anything else returns ActionError."
+                    }
+                },
+                "required": ["user_id"]
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "name": { "type": "string" },
+                    "email": { "type": "string" }
+                }
+            }
+        },
+        "lookup_user_with_cost": {
+            "display_name": "Lookup User (with Billing)",
+            "description": "Returns ActionError with cost_usd for unknown user IDs — for when a chargeable lookup still incurs a cost even on failure.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "string",
+                        "description": "The user ID to look up. Use '1' or '2' for success; anything else returns ActionError with cost."
+                    }
+                },
+                "required": ["user_id"]
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "name": { "type": "string" },
+                    "email": { "type": "string" }
+                }
+            }
+        }
+    }
+}

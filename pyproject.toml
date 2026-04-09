@@ -29,6 +29,19 @@ dependencies = [
     "aiohttp", 
     "jsonschema==4.17.3"
 ]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "aioresponses>=0.7",
+    "pytest-cov>=6.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
 [project.urls]
 Homepage = "https://github.com/Autohive-AI/integrations-sdk"
 Issues = "https://github.com/Autohive-AI/integrations-sdk/issues"

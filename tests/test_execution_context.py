@@ -32,7 +32,8 @@ async def test_fetch_get_json(mock_aio):
     async with ExecutionContext() as ctx:
         data = await ctx.fetch(BASE_URL)
 
-    assert data == {"ok": True}
+    assert data.data == {"ok": True}
+    assert data.status == 200
 
 
 async def test_fetch_post_json(mock_aio):
@@ -41,7 +42,7 @@ async def test_fetch_post_json(mock_aio):
     async with ExecutionContext() as ctx:
         data = await ctx.fetch(BASE_URL, method="POST", json={"name": "test"})
 
-    assert data == {"id": 1}
+    assert data.data == {"id": 1}
 
 
 async def test_fetch_text_response(mock_aio):
@@ -50,7 +51,7 @@ async def test_fetch_text_response(mock_aio):
     async with ExecutionContext() as ctx:
         data = await ctx.fetch(BASE_URL)
 
-    assert data == "plain text"
+    assert data.data == "plain text"
 
 
 async def test_fetch_empty_response_204(mock_aio):
@@ -59,7 +60,8 @@ async def test_fetch_empty_response_204(mock_aio):
     async with ExecutionContext() as ctx:
         data = await ctx.fetch(BASE_URL)
 
-    assert data is None
+    assert data.data is None
+    assert data.status == 204
 
 
 # ── Error handling ───────────────────────────────────────────────────────────
@@ -137,7 +139,7 @@ async def test_fetch_query_params(mock_aio):
     async with ExecutionContext() as ctx:
         data = await ctx.fetch(BASE_URL, params={"page": 1, "limit": 10})
 
-    assert data == {"ok": True}
+    assert data.data == {"ok": True}
 
 
 # ── Retry logic ──────────────────────────────────────────────────────────────
@@ -152,7 +154,7 @@ async def test_fetch_retry_on_client_error(mock_aio):
         with patch("asyncio.sleep", return_value=None) as mock_sleep:
             data = await ctx.fetch(BASE_URL)
 
-    assert data == {"ok": True}
+    assert data.data == {"ok": True}
     mock_sleep.assert_awaited_once()
 
 
@@ -205,7 +207,7 @@ async def test_fetch_nested_params(mock_aio):
     async with ExecutionContext() as ctx:
         data = await ctx.fetch(BASE_URL, params={"filter": {"status": "active"}})
 
-    assert data == {"ok": True}
+    assert data.data == {"ok": True}
 
 
 # ── URL with existing query string ──────────────────────────────────────────
@@ -220,7 +222,7 @@ async def test_fetch_params_appended_with_ampersand(mock_aio):
     async with ExecutionContext() as ctx:
         data = await ctx.fetch(base_with_query, params={"page": 2})
 
-    assert data == {"ok": True}
+    assert data.data == {"ok": True}
 
 
 # ── Timeout triggers retry ──────────────────────────────────────────────────
@@ -238,7 +240,7 @@ async def test_fetch_retry_on_timeout(mock_aio):
         with patch("asyncio.sleep", return_value=None):
             data = await ctx.fetch(BASE_URL)
 
-    assert data == {"ok": True}
+    assert data.data == {"ok": True}
 
 
 # ── Max retries exhausted ───────────────────────────────────────────────────
@@ -309,7 +311,7 @@ async def test_fetch_creates_session_without_context_manager(mock_aio):
     assert ctx._session is None
 
     data = await ctx.fetch(BASE_URL)
-    assert data == {"ok": True}
+    assert data.data == {"ok": True}
     assert ctx._session is not None
 
     # Clean up

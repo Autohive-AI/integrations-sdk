@@ -26,6 +26,25 @@ Start with the **[Building Your First Integration](docs/manual/building_your_fir
 | [`samples/template/`](samples/template/) | Clean starter template — copy this to begin a new integration |
 | [`samples/api-fetch/`](samples/api-fetch/) | Working example with unauthenticated, Basic Auth, and Bearer token API calls |
 
+## Testing
+
+Install test dependencies:
+```bash
+pip install -e ".[test]"
+```
+
+Run tests:
+```bash
+python -m pytest tests/ -v
+```
+
+Run with coverage:
+```bash
+python -m pytest tests/ -v --cov=autohive_integrations_sdk --cov-report=term-missing
+```
+
+CI runs automatically on PRs via GitHub Actions — see [`.github/workflows/tests.yml`](.github/workflows/tests.yml).
+
 ## Validation & CI
 
 Integration validation is handled by the [autohive-integrations-tooling](https://github.com/Autohive-AI/autohive-integrations-tooling) repo. See its README for CI pipeline setup and the integration checklist.

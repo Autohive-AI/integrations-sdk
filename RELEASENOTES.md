@@ -28,15 +28,15 @@ items = response.data["results"]
 ### Migration Guide
 
 1. **Find all `context.fetch()` calls** in your integration code
-2. **Rename the return variable** to `response` (recommended) and access the body via `.data`:
+2. **Access the response body via `.data`** — the return value is now a `FetchResponse` object, not the raw body:
    ```python
    # Before
    result = await context.fetch(url)
    return ActionResult(data=result)
 
    # After
-   response = await context.fetch(url)
-   return ActionResult(data=response.data)
+   result = await context.fetch(url)
+   return ActionResult(data=result.data)
    ```
 3. **Optional: use `.status` and `.headers`** for richer error handling or response inspection:
    ```python

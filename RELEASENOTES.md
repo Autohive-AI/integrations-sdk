@@ -1,5 +1,56 @@
 # Release Notes
 
+## 2.0.0
+
+### ⚠️ Breaking Change
+
+`ExecutionContext.fetch()` now returns a `FetchResponse` object instead of the raw parsed body.
+
+**Before (1.x):**
+```python
+data = await context.fetch("https://api.example.com/items")
+# data was the parsed JSON dict/list or text string directly
+items = data["results"]
+```
+
+**After (2.0):**
+```python
+response = await context.fetch("https://api.example.com/items")
+# response is a FetchResponse with .status, .headers, and .data
+items = response.data["results"]
+```
+
+`FetchResponse` attributes:
+- `status` — HTTP status code (e.g. `200`, `201`)
+- `headers` — response headers as a plain `dict`
+- `data` — parsed JSON (`dict`/`list`) for `application/json` responses, raw text otherwise, `None` for empty 200/201/204 responses
+
+### Migration Guide
+
+1. **Find all `context.fetch()` calls** in your integration code
+2. **Access the response body via `.data`** — the return value is now a `FetchResponse` object, not the raw body:
+   ```python
+   # Before
+   result = await context.fetch(url)
+   return ActionResult(data=result)
+
+   # After
+   result = await context.fetch(url)
+   return ActionResult(data=result.data)
+   ```
+3. **Optional: use `.status` and `.headers`** for richer error handling or response inspection:
+   ```python
+   response = await context.fetch(url)
+   if response.status == 201:
+       log.info(f"Created, location: {response.headers.get('Location')}")
+   ```
+
+### Other Changes
+- Add `FetchResponse` class, exported from the package
+- Add pytest test suite (72 tests, 99% coverage) with `pytest-asyncio` and `aioresponses`
+- Add GitHub Actions CI workflow with coverage reporting on PRs
+- Add coverage badge and CI status badges to READMEs
+
 ## 1.1.1
 - Export HTTPError and RateLimitError from package for direct import
 - Added PyPI-optimised README with absolute links and best practices

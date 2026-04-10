@@ -550,3 +550,39 @@ def test_re_register_handler_overwrites(integration):
             return ActionResult(data={"greeting": "second"})
 
     assert integration._action_handlers["test_action"] is Second
+
+
+# ── Abstract base class pass-through ───────────────────────────────────────
+
+
+async def test_action_handler_abstract_execute_returns_none():
+    """super().execute() on the ABC body executes the `pass` and returns None."""
+
+    class Concrete(ActionHandler):
+        async def execute(self, inputs, context):
+            return await super().execute(inputs, context)
+
+    result = await Concrete().execute({}, None)
+    assert result is None
+
+
+async def test_polling_trigger_handler_abstract_poll_returns_none():
+    """super().poll() on the ABC body executes the `pass` and returns None."""
+
+    class Concrete(PollingTriggerHandler):
+        async def poll(self, inputs, last_poll_ts, context):
+            return await super().poll(inputs, last_poll_ts, context)
+
+    result = await Concrete().poll({}, None, None)
+    assert result is None
+
+
+async def test_connected_account_handler_abstract_get_account_info_returns_none():
+    """super().get_account_info() on the ABC body executes the `pass` and returns None."""
+
+    class Concrete(ConnectedAccountHandler):
+        async def get_account_info(self, context):
+            return await super().get_account_info(context)
+
+    result = await Concrete().get_account_info(None)
+    assert result is None

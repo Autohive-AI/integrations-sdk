@@ -26,6 +26,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[test]"
 
+      - name: Get commit info
+        id: commit-info
+        run: |
+          echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "message=$(git log -1 --pretty=%s)" >> "$GITHUB_OUTPUT"
+
       - name: Run tests with coverage
         run: |
           set -o pipefail
@@ -42,6 +48,7 @@ jobs:
           pytest-coverage-path: pytest-coverage.txt
           pytest-xml-coverage-path: coverage.xml
           create-new-comment: ${{ github.event_name == 'pull_request' }}
+          title: "Coverage — `${{ steps.commit-info.outputs.short_sha }}` ${{ steps.commit-info.outputs.message }}"
 
       - name: Update coverage badge
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'

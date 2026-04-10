@@ -410,6 +410,12 @@ async def test_get_connected_account_no_auth_fields(tmp_path):
 # ── Config loading edge cases ───────────────────────────────────────────────
 
 
+def test_load_config_default_path():
+    """Integration.load() with no args uses __file__-relative default path."""
+    with pytest.raises(ConfigurationError, match="not found"):
+        Integration.load()  # no config.json at the default location
+
+
 def test_load_config_no_actions_no_triggers(tmp_path):
     config = {
         "name": "empty",
@@ -489,6 +495,45 @@ async def test_multiple_actions(tmp_path):
     r2 = await intg.execute_action("add", {"a": 2, "b": 3}, ctx)
     assert r2.type == ResultType.ACTION
     assert r2.result.data == {"sum": 5}
+
+
+def test_register_polling_trigger_not_in_config(integration):
+    with pytest.raises(ConfigurationError, match="not defined in config"):
+
+        @integration.polling_trigger("nonexistent_trigger")
+        class Handler(PollingTriggerHandler):
+            async def poll(self, inputs, last_poll_ts, context):
+                return []
+
+
+async def test_execute_polling_trigger_invalid_inputs(integration):
+    """Invalid inputs against trigger input_schema → ValidationError."""
+
+    @integration.polling_trigger("test_trigger")
+    class Handler(PollingTriggerHandler):
+        async def poll(self, inputs, last_poll_ts, context):
+            return []
+
+    ctx = ExecutionContext(auth={"api_key": "k"})
+    with pytest.raises(ValidationError):
+        await integration.execute_polling_trigger(
+            "test_trigger", {}, None, ctx  # missing required 'channel'
+        )
+
+
+async def test_execute_polling_trigger_auth_failure(integration):
+    """Invalid auth credentials for polling trigger → ValidationError."""
+
+    @integration.polling_trigger("test_trigger")
+    class Handler(PollingTriggerHandler):
+        async def poll(self, inputs, last_poll_ts, context):
+            return []
+
+    ctx = ExecutionContext(auth={})  # missing required api_key
+    with pytest.raises(ValidationError):
+        await integration.execute_polling_trigger(
+            "test_trigger", {"channel": "general"}, None, ctx
+        )
 
 
 def test_re_register_handler_overwrites(integration):

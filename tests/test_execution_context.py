@@ -336,3 +336,21 @@ async def test_fetch_http_error_json_body(mock_aio):
 
     assert exc_info.value.status == 400
     assert exc_info.value.response_data == {"error": "bad request", "code": "INVALID"}
+
+
+# ── Response parse fallback ─────────────────────────────────────────────────
+
+
+async def test_fetch_json_parse_failure_falls_back_to_text(mock_aio):
+    """When Content-Type says JSON but body isn't valid JSON, falls back to text."""
+    mock_aio.get(
+        BASE_URL,
+        status=200,
+        body="not valid json",
+        content_type="application/json",
+    )
+
+    async with ExecutionContext() as ctx:
+        data = await ctx.fetch(BASE_URL)
+
+    assert data.data == "not valid json"

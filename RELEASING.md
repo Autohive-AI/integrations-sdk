@@ -10,6 +10,8 @@
     - Authors
     - Dependencies
 
+* Update `RELEASENOTES.md` with an entry for the new version.
+
 * Run the test suite and ensure all tests pass:
     ```
     python -m pytest tests/ -v --cov=autohive_integrations_sdk --cov-report=term-missing

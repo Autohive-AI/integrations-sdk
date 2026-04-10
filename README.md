@@ -31,6 +31,7 @@ Start with the **[Building Your First Integration](docs/manual/building_your_fir
 |--------|-------------|
 | [`samples/template/`](samples/template/) | Clean starter template — copy this to begin a new integration |
 | [`samples/api-fetch/`](samples/api-fetch/) | Working example with unauthenticated, Basic Auth, and Bearer token API calls |
+| [`samples/action-error-demo/`](samples/action-error-demo/) | Demonstrates `ActionError` for expected application-level errors |
 
 ## Testing
 

@@ -29,8 +29,13 @@ jobs:
       - name: Get commit info
         id: commit-info
         run: |
-          echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-          echo "message=$(git log -1 --pretty=%s)" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            COMMIT_SHA="${{ github.sha }}"
+          fi
+          echo "short_sha=$(echo "$COMMIT_SHA" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          echo "message=$(git log -1 --pretty=%s "$COMMIT_SHA")" >> "$GITHUB_OUTPUT"
 
       - name: Run tests with coverage
         run: |

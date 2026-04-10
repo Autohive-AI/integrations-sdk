@@ -1,5 +1,11 @@
 # Integrations SDK for Autohive
 
+[![Tests](https://github.com/Autohive-AI/integrations-sdk/actions/workflows/tests.yml/badge.svg)](https://github.com/Autohive-AI/integrations-sdk/actions/workflows/tests.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/TheRealAgentK/e8adf35c8508876ab8ba09422ddc2535/raw/coverage-badge.json)](https://github.com/Autohive-AI/integrations-sdk/actions/workflows/tests.yml)
+[![PyPI version](https://img.shields.io/pypi/v/autohive-integrations-sdk)](https://pypi.org/project/autohive-integrations-sdk/)
+[![Python](https://img.shields.io/pypi/pyversions/autohive-integrations-sdk)](https://pypi.org/project/autohive-integrations-sdk/)
+[![License: MIT](https://img.shields.io/pypi/l/autohive-integrations-sdk)](https://github.com/Autohive-AI/integrations-sdk/blob/master/LICENSE)
+
 ## Overview
 
 This is the SDK for building integrations into Autohive's AI agent platform.
@@ -25,6 +31,26 @@ Start with the **[Building Your First Integration](docs/manual/building_your_fir
 |--------|-------------|
 | [`samples/template/`](samples/template/) | Clean starter template — copy this to begin a new integration |
 | [`samples/api-fetch/`](samples/api-fetch/) | Working example with unauthenticated, Basic Auth, and Bearer token API calls |
+| [`samples/action-error-demo/`](samples/action-error-demo/) | Demonstrates `ActionError` for expected application-level errors |
+
+## Testing
+
+Install test dependencies:
+```bash
+pip install -e ".[test]"
+```
+
+Run tests:
+```bash
+python -m pytest tests/ -v
+```
+
+Run with coverage:
+```bash
+python -m pytest tests/ -v --cov=autohive_integrations_sdk --cov-report=term-missing
+```
+
+CI runs automatically on PRs via GitHub Actions — see [`.github/workflows/tests.yml`](.github/workflows/tests.yml).
 
 ## Validation & CI
 

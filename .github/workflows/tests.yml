@@ -38,7 +38,6 @@ jobs:
           fi
           echo "short_sha=$(echo "$COMMIT_SHA" | cut -c1-7)" >> "$GITHUB_OUTPUT"
           echo "message=$(git log -1 --pretty=%s "$COMMIT_SHA")" >> "$GITHUB_OUTPUT"
-          echo "author=$(git log -1 --pretty=%an "$COMMIT_SHA")" >> "$GITHUB_OUTPUT"
 
       - name: Run tests with coverage
         run: |
@@ -56,7 +55,8 @@ jobs:
           pytest-coverage-path: pytest-coverage.txt
           pytest-xml-coverage-path: coverage.xml
           create-new-comment: ${{ github.event_name == 'pull_request' }}
-          title: "Coverage — `${{ steps.commit-info.outputs.short_sha }}` (${{ steps.commit-info.outputs.message }}) by @${{ steps.commit-info.outputs.author }}"
+          hide-report: false
+          title: "Coverage — `${{ steps.commit-info.outputs.short_sha }}` (${{ steps.commit-info.outputs.message }}) by @${{ github.actor }}"
 
       - name: Update coverage badge
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'

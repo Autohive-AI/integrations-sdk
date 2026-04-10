@@ -56,7 +56,7 @@ jobs:
       - name: Build coverage comment
         id: coverage
         run: |
-          TOTAL=$(grep '^TOTAL' pytest-coverage.txt | awk '{print $(NF-1)}')
+          TOTAL=$(grep '^TOTAL' pytest-coverage.txt | awk '{print $4}')
           echo "total=${TOTAL}" >> "$GITHUB_OUTPUT"
 
           REPO_URL="${{ github.server_url }}/${{ github.repository }}"

@@ -40,6 +40,7 @@ jobs:
           else
             COMMIT_SHA="${{ github.sha }}"
           fi
+          echo "sha=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
           echo "short_sha=$(echo "$COMMIT_SHA" | cut -c1-7)" >> "$GITHUB_OUTPUT"
           echo "message=$(git log -1 --pretty=%s "$COMMIT_SHA")" >> "$GITHUB_OUTPUT"
 
@@ -58,7 +59,37 @@ jobs:
           TOTAL=$(grep '^TOTAL' pytest-coverage.txt | awk '{print $(NF-1)}')
           echo "total=${TOTAL}" >> "$GITHUB_OUTPUT"
 
-          TITLE="Coverage — \`${{ steps.commit-info.outputs.short_sha }}\` (${{ steps.commit-info.outputs.message }}) by @${{ github.actor }}"
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+          SHA="${{ steps.commit-info.outputs.sha }}"
+          SHORT_SHA="${{ steps.commit-info.outputs.short_sha }}"
+          COMMIT_LINK="[\`${SHORT_SHA}\`](${REPO_URL}/commit/${SHA})"
+          TITLE="Coverage — ${COMMIT_LINK} (${{ steps.commit-info.outputs.message }}) by @${{ github.actor }}"
+
+          # Convert "308, 315-320, 347" into linked line numbers
+          linkify_lines() {
+            local file="$1" missing="$2"
+            if [ -z "$missing" ]; then
+              echo ""
+              return
+            fi
+            local result=""
+            IFS=', ' read -ra PARTS <<< "$missing"
+            for part in "${PARTS[@]}"; do
+              [ -z "$part" ] && continue
+              if [[ "$part" == *-* ]]; then
+                local start="${part%-*}" end="${part#*-}"
+                local link="[${part}](${REPO_URL}/blob/${SHA}/${file}#L${start}-L${end})"
+              else
+                local link="[${part}](${REPO_URL}/blob/${SHA}/${file}#L${part})"
+              fi
+              if [ -n "$result" ]; then
+                result="${result}, ${link}"
+              else
+                result="${link}"
+              fi
+            done
+            echo "$result"
+          }
 
           {
             echo "<!-- coverage-comment -->"
@@ -74,7 +105,8 @@ jobs:
               MISS=$(echo "$line" | awk '{print $3}')
               COV=$(echo "$line" | awk '{print $4}')
               MISSING=$(echo "$line" | awk '{for(i=5;i<=NF;i++) printf "%s ", $i; print ""}' | xargs)
-              echo "| \`${FILE}\` | ${STMTS} | ${MISS} | ${COV} | ${MISSING} |"
+              LINKED=$(linkify_lines "$FILE" "$MISSING")
+              echo "| \`${FILE}\` | ${STMTS} | ${MISS} | ${COV} | ${LINKED} |"
             done
           } > coverage-comment.md
 

@@ -35,9 +35,23 @@ jobs:
             --cov-report=xml:coverage.xml \
             | tee pytest-coverage.txt
 
-      - name: Post coverage comment on PR
-        if: github.event_name == 'pull_request'
+      - name: Coverage report
         uses: MishaKav/pytest-coverage-comment@main
+        id: coverage-comment
         with:
           pytest-coverage-path: pytest-coverage.txt
           pytest-xml-coverage-path: coverage.xml
+          create-new-comment: ${{ github.event_name == 'pull_request' }}
+
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: integrations-sdk-coverage
+          filename: coverage-badge.json
+          label: coverage
+          message: ${{ steps.coverage-comment.outputs.coverage }}
+          valColorRange: ${{ steps.coverage-comment.outputs.coverage }}
+          minColorRange: 50
+          maxColorRange: 100

@@ -56,6 +56,16 @@ CI runs automatically on PRs via GitHub Actions — see [`.github/workflows/test
 
 Integration validation is handled by the [autohive-integrations-tooling](https://github.com/Autohive-AI/autohive-integrations-tooling) repo. See its README for CI pipeline setup and the integration checklist.
 
+## Agent Skills
+
+The [`skills/`](skills/) directory contains agent skills for AI coding assistants (Amp, Claude Code, etc.) that automate common SDK tasks.
+
+| Skill | Description |
+|-------|-------------|
+| [`upgrading-sdk-v2`](skills/upgrading-sdk-v2/) | Upgrades an integration from SDK 1.x to 2.0.0 — covers source code, tests, requirements, and config |
+
+To use a skill, copy or symlink it into your workspace's `.agents/skills/` directory or your global `~/.config/agents/skills/` directory. See [`skills/README.md`](skills/README.md) for setup instructions.
+
 ## Additional Information
 
 - [Release Notes](RELEASENOTES.md)

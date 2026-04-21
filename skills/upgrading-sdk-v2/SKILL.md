@@ -5,7 +5,31 @@ description: "Upgrades an Autohive integration from SDK 1.0.x or 1.1.x to 2.0.0.
 
 # Upgrading an Integration to SDK 2.0.0
 
-## The Breaking Change
+## What Changed Between 1.0.x and 2.0.0
+
+### SDK 1.1.0 — ActionError (adopt during upgrade)
+
+SDK 1.1.0 introduced `ActionError`, a dedicated error return type that bypasses output schema validation. Integrations still on 1.0.x never adopted it. **During the 2.0.0 upgrade, also convert all error paths to use `ActionError`.**
+
+```python
+from autohive_integrations_sdk import ActionError
+
+# Before — 1.0.x error pattern (fails output schema validation)
+return ActionResult(data={"error": str(e)}, cost_usd=0.0)
+return ActionResult(data={"result": False, "error": str(e), "items": []}, cost_usd=0.0)
+
+# After — ActionError (returns ResultType.ACTION_ERROR, skips schema validation)
+return ActionError(message=str(e))
+```
+
+`ActionError` is a dataclass, not an exception — **return it, do not raise it.**
+
+Convert ALL of these patterns:
+- `return ActionResult(data={"error": ...})` → `return ActionError(message=...)`
+- `return ActionResult(data={"result": False, "error": ..., <extra keys>})` → `return ActionError(message=...)` (extra keys like `"items": []` are dropped — ActionError only carries a message)
+- Exception catch blocks: `return ActionResult(data={"error": str(e)})` → `return ActionError(message=str(e))`
+
+### SDK 2.0.0 — FetchResponse (breaking change)
 
 SDK 2.0.0 has **one breaking change**: `context.fetch()` now returns a `FetchResponse` object instead of the parsed body directly.
 
@@ -49,17 +73,27 @@ Read the main Python file and understand how `context.fetch()` is used. Common p
 
 ### Step 2 — Update the source code
 
+**A. FetchResponse — add `.data` to all fetch call sites:**
+
 For every `context.fetch()` call site:
 
 1. If the result is used as a dict/list (accessing keys, iterating), add `.data`
 2. If the result is returned directly or passed to `ActionResult(data=...)`, add `.data`
 3. If the result is checked with `isinstance()`, check `.data` instead
 4. If the result is stored then accessed later, trace all access points
+5. If the result is checked with `hasattr(response, "status_code")` or `hasattr(response, "json")`, replace with `.status` and `.data` — `FetchResponse` always has these fields
+
+**B. ActionError — convert all error returns:**
+
+1. Add `ActionError` to the SDK import: `from autohive_integrations_sdk import ..., ActionError`
+2. Convert every `return ActionResult(data={"error": ...})` to `return ActionError(message=...)`
+3. Convert every `return ActionResult(data={"result": False, "error": ...})` to `return ActionError(message=...)`
+4. Convert every `except Exception as e: return ActionResult(data={"error": str(e)})` to `return ActionError(message=str(e))`
 
 **Do NOT change:**
 - Error handling (`try/except`) — exceptions are raised the same way
 - The `context.fetch()` call signature — parameters are unchanged
-- `ActionResult`, `ActionError`, `ActionHandler` — unchanged
+- `ActionResult`, `ActionHandler` — unchanged
 
 **Optionally leverage** `.status` and `.headers` for richer error handling if the integration currently parses status from exception messages.
 
@@ -93,6 +127,8 @@ If the integration was already at a higher version (e.g. `1.1.0`), bump to `2.0.
 
 ### Step 5 — Update unit tests (if they exist)
 
+**A. Wrap fetch mocks in FetchResponse:**
+
 Unit tests that mock `context.fetch` must return `FetchResponse` instead of bare dicts.
 
 ```python
@@ -115,13 +151,39 @@ For every `mock_context.fetch.return_value = ...` in the test file:
 3. For `return_value = None` (simulating fetch failure), keep as `None` — the integration handles this before accessing `.data`
 4. For `side_effect = Exception(...)` mocks, keep unchanged — exceptions bypass `FetchResponse`
 
-Add the `FetchResponse` import at the top of the test file:
+**B. Update error assertions for ActionError:**
+
+Error paths now return `ActionError` instead of `ActionResult` with error data. Test assertions must change:
 
 ```python
-from autohive_integrations_sdk import FetchResponse  # noqa: E402
+from autohive_integrations_sdk import FetchResponse, ResultType  # noqa: E402
+
+# Before — 1.0.x error assertion
+result = await integration.execute_action("some_action", inputs, mock_context)
+assert result.result.data["error"] == "Not found"
+assert result.result.data["result"] is False
+
+# After — 2.0.0 ActionError assertion
+result = await integration.execute_action("some_action", inputs, mock_context)
+assert result.type == ResultType.ACTION_ERROR
+assert "Not found" in result.result.message
 ```
 
-Place this import next to the existing SDK imports (e.g. `ValidationError`).
+**C. Replace `pytest.raises(ValidationError)` with result type checks:**
+
+SDK 2.0.0 changed `execute_action` to no longer raise `ValidationError`. It now returns an `IntegrationResult` with `type=ResultType.VALIDATION_ERROR`:
+
+```python
+# Before — 1.0.x
+with pytest.raises(ValidationError):
+    await integration.execute_action("some_action", bad_inputs, mock_context)
+
+# After — 2.0.0
+result = await integration.execute_action("some_action", bad_inputs, mock_context)
+assert result.type == ResultType.VALIDATION_ERROR
+```
+
+Remove `ValidationError` imports and add `ResultType` where needed.
 
 ### Step 6 — Update integration tests (if they exist)
 
@@ -141,41 +203,62 @@ async def real_fetch(url, *, method="GET", json=None, headers=None, **kwargs):
             )
 ```
 
-### Step 7 — Verify
+### Step 7 — Local validation (required before pushing)
 
-Run the unit tests to confirm everything passes:
+Run the **same checks CI runs** locally. Skipping this step will result in CI failures. The tooling repo must be cloned alongside the integrations repo (see [CONTRIBUTING.md](CONTRIBUTING.md) for setup).
 
-```bash
-source .venv/bin/activate
-uv pip install -r <integration>/requirements.txt
-pytest <integration>/
-```
-
-If integration tests exist, run those too:
-
-```bash
-pytest <integration>/tests/test_*_integration.py -m integration
-```
-
-### Step 8 — Lint and format
+**A. Lint and format (must use the CI ruff config):**
 
 ```bash
 ruff check --fix <integration>
 ruff format --config ../autohive-integrations-tooling/ruff.toml <integration>
 ```
 
+⚠️ **Always use `--config ../autohive-integrations-tooling/ruff.toml`** for formatting. The tooling config uses `line-length = 120`. Running `ruff format` without it uses the default 88-char width and will fail CI.
+
+**B. Run unit tests:**
+
+```bash
+source .venv/bin/activate
+python -m pytest <integration>/tests/test_*_unit.py -v
+```
+
+**C. Run integration tests (if they exist and credentials are available):**
+
+```bash
+python -m pytest <integration>/tests/test_*_integration.py -m integration -v
+```
+
+**D. Run the CI validation scripts:**
+
+```bash
+python ../autohive-integrations-tooling/scripts/validate_integration.py <integration>
+python ../autohive-integrations-tooling/scripts/check_code.py <integration>
+```
+
+These scripts run the same checks as CI — structure validation, config-code sync, fetch pattern linting, import checks, bandit security scan, and pip-audit. Fix any issues they report before pushing.
+
+**E. Fetch pattern linter caveat:**
+
+The CI fetch pattern linter (`check_fetch_pattern.py`) does a **naive regex match** on variables named `response` accessed with `.get()` or `["..."]`. If a helper function (like `execute_graphql()`) already returns `response.data`, callers hold a plain dict in a variable named `response` — the linter will false-positive on this. Fix by renaming the variable (e.g. `gql_result`, `body`, `data`).
+
 ## Checklist
 
 Before considering an integration upgraded, verify:
 
 - [ ] All `context.fetch()` return values access `.data` for the body
+- [ ] All error paths return `ActionError(message=...)` instead of `ActionResult` with error data
+- [ ] `ActionError` is imported from the SDK
 - [ ] `requirements.txt` pins `autohive-integrations-sdk~=2.0.0`
 - [ ] `config.json` version is bumped to `2.0.0`
 - [ ] Unit test mocks wrap return values in `FetchResponse(...)`
+- [ ] Unit test error assertions use `result.type == ResultType.ACTION_ERROR` and `result.result.message`
+- [ ] `pytest.raises(ValidationError)` replaced with `result.type == ResultType.VALIDATION_ERROR`
 - [ ] Integration test `real_fetch` returns `FetchResponse(...)` (if applicable)
-- [ ] `FetchResponse` is imported where needed
+- [ ] `FetchResponse` and `ResultType` are imported where needed
 - [ ] All unit tests pass
-- [ ] Lint and format pass
+- [ ] `ruff check` and `ruff format --config ../autohive-integrations-tooling/ruff.toml` pass
+- [ ] `validate_integration.py` and `check_code.py` pass
 
 ## Common Gotchas
 
@@ -190,3 +273,7 @@ Before considering an integration upgraded, verify:
 5. **`None` return values**: Some integrations check `if not response:` after fetch. With `FetchResponse`, this check needs to be `if response is None:` or `if response.data is None:` depending on intent.
 
 6. **Tests with `return_value = None`**: If the integration code checks `if not result:` after a fetch wrapped in try/except that returns `None` on failure, keep the mock as `None` — the code never reaches `.data` on that path.
+
+7. **CI fetch pattern linter false positives**: The linter flags any variable named `response` accessed with `.get()` or `["..."]`. If a helper already unwraps `.data` and returns a plain dict, rename the variable in callers to avoid the match (e.g. `gql_result`, `body`, `api_data`).
+
+8. **Ruff config mismatch**: CI uses `../autohive-integrations-tooling/ruff.toml` with `line-length = 120`. Always pass `--config` when formatting or local results will differ from CI.

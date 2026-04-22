@@ -20,6 +20,9 @@ return ActionResult(data={"result": False, "error": str(e), "items": []}, cost_u
 
 # After — ActionError (returns ResultType.ACTION_ERROR, skips schema validation)
 return ActionError(message=str(e))
+
+# After — ActionError with cost (when a billable API call was made before the error)
+return ActionError(message=str(e), cost_usd=0.01)
 ```
 
 `ActionError` is a dataclass, not an exception — **return it, do not raise it.**
@@ -28,6 +31,7 @@ Convert ALL of these patterns:
 - `return ActionResult(data={"error": ...})` → `return ActionError(message=...)`
 - `return ActionResult(data={"result": False, "error": ..., <extra keys>})` → `return ActionError(message=...)` (extra keys like `"items": []` are dropped — ActionError only carries a message)
 - Exception catch blocks: `return ActionResult(data={"error": str(e)})` → `return ActionError(message=str(e))`
+- Cost-bearing error paths: `return ActionResult(data={"error": str(e)}, cost_usd=0.01)` → `return ActionError(message=str(e), cost_usd=0.01)` — preserve the cost so billing is accurate
 
 ### SDK 2.0.0 — FetchResponse (breaking change)
 
@@ -89,6 +93,7 @@ For every `context.fetch()` call site:
 2. Convert every `return ActionResult(data={"error": ...})` to `return ActionError(message=...)`
 3. Convert every `return ActionResult(data={"result": False, "error": ...})` to `return ActionError(message=...)`
 4. Convert every `except Exception as e: return ActionResult(data={"error": str(e)})` to `return ActionError(message=str(e))`
+5. Remove the `"error"` property (and any `"result": bool` property used only for error signalling) from each action's output schema in `config.json` — these fields are no longer returned in the action output
 
 **Do NOT change:**
 - Error handling (`try/except`) — exceptions are raised the same way
@@ -249,6 +254,7 @@ Before considering an integration upgraded, verify:
 - [ ] All `context.fetch()` return values access `.data` for the body
 - [ ] All error paths return `ActionError(message=...)` instead of `ActionResult` with error data
 - [ ] `ActionError` is imported from the SDK
+- [ ] `"error"` and error-only `"result"` properties removed from output schemas in `config.json`
 - [ ] `requirements.txt` pins `autohive-integrations-sdk~=2.0.0`
 - [ ] `config.json` version is bumped to `2.0.0`
 - [ ] Unit test mocks wrap return values in `FetchResponse(...)`

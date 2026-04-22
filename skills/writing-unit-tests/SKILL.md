@@ -86,7 +86,9 @@ def mock_context():
     return ctx
 ```
 
-If the integration reads credentials from `context.auth`, populate it:
+If the integration reads credentials from `context.auth`, populate it to match the auth shape in `config.json`.
+
+**Platform OAuth** (`config.auth.type == "platform"`): The SDK wraps OAuth tokens in a standard envelope:
 
 ```python
 ctx.auth = {
@@ -94,6 +96,25 @@ ctx.auth = {
     "credentials": {"access_token": "test_token"},  # nosec B105
 }
 ```
+
+**Custom auth** (`config.auth.type == "custom"`): The SDK validates `context.auth` directly against `config.auth.fields`. Use a flat object matching the field schema:
+
+```python
+# Example: Freshdesk (api_key + domain)
+ctx.auth = {
+    "api_key": "test_api_key",  # nosec B105
+    "domain": "testcompany",
+}
+
+# Example: Ghost (api_url + content_api_key + admin_api_key)
+ctx.auth = {
+    "api_url": "https://test.ghost.io",
+    "content_api_key": "test_content_key",  # nosec B105
+    "admin_api_key": "test_admin_key",  # nosec B105
+}
+```
+
+Using the wrong shape will cause `ResultType.VALIDATION_ERROR` before the action handler runs, making tests false negatives.
 
 ## Test Categories
 

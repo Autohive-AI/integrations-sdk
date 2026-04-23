@@ -110,6 +110,7 @@ Run these steps in order from the integrations repo root. Replace `<name>` with 
 ```bash
 source .venv/bin/activate
 uv pip install -r <name>/requirements.txt
+# Or with pip: pip install -r <name>/requirements.txt
 ```
 
 ### Step 2 — Structure validation
@@ -164,7 +165,7 @@ Key settings:
 
 ## Workflow Summary
 
-1. Install deps → `uv pip install -r <name>/requirements.txt`
+1. Install deps → `uv pip install -r <name>/requirements.txt` (or `pip install -r <name>/requirements.txt`)
 2. Validate structure → `python ../autohive-integrations-tooling/scripts/validate_integration.py <name>`
 3. Check code → `python ../autohive-integrations-tooling/scripts/check_code.py <name>`
 4. Run tests → `pytest <name>/ -v`

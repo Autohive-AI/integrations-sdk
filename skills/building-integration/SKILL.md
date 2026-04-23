@@ -7,7 +7,11 @@ description: "Runs the local build and validation pipeline for an Autohive integ
 
 Run the same checks CI runs, locally, before pushing.
 
-## Prerequisites
+## Preflight Checks
+
+Run these checks **before** starting the build pipeline. Fix any that fail.
+
+### 1. Tooling repo
 
 The tooling repo must be cloned alongside the integrations repo:
 
@@ -17,12 +21,85 @@ parent-dir/
 └── autohive-integrations-tooling/  ← must exist
 ```
 
-The integrations repo must have a `.venv` with Python 3.13+ and test dependencies installed:
+Check: `ls ../autohive-integrations-tooling/scripts/validate_integration.py`
+
+If missing, clone it:
+
+```bash
+git clone https://github.com/autohive-ai/autohive-integrations-tooling.git ../autohive-integrations-tooling
+```
+
+### 2. Python 3.13+
+
+Check: `python3 --version` (must be 3.13+)
+
+If not available, install with uv:
+
+```bash
+uv python install 3.13
+```
+
+Or use your system package manager / pyenv.
+
+### 3. Virtual environment
+
+Check: `ls .venv/bin/python`
+
+If missing, create it:
+
+```bash
+uv venv --python 3.13 .venv
+```
+
+Or without uv:
+
+```bash
+python3.13 -m venv .venv
+```
+
+Always activate before running any commands:
 
 ```bash
 source .venv/bin/activate
+```
+
+### 4. Package installer
+
+Check: `which uv` or `which pip`
+
+uv is preferred. If neither is available, install uv:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### 5. Test dependencies
+
+Check: `python -c "import pytest"` (from within the activated venv)
+
+If missing, install:
+
+```bash
 uv pip install -r requirements-test.txt
 ```
+
+Or with pip:
+
+```bash
+pip install -r requirements-test.txt
+```
+
+### 6. Ruff
+
+Check: `ruff --version` (from within the activated venv)
+
+If missing, install:
+
+```bash
+uv pip install ruff
+```
+
+Note: `check_code.py` auto-installs ruff when it runs, but you need it locally for the manual auto-fix commands in Step 5.
 
 ## Build Pipeline
 

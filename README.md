@@ -62,7 +62,10 @@ The [`skills/`](skills/) directory contains agent skills for AI coding assistant
 
 | Skill | Description |
 |-------|-------------|
+| [`building-integration`](skills/building-integration/) | Runs the local build and validation pipeline (structure, lint, format, security, tests) |
 | [`upgrading-sdk-v2`](skills/upgrading-sdk-v2/) | Upgrades an integration from SDK 1.x to 2.0.0 — covers source code, tests, requirements, and config |
+| [`writing-unit-tests`](skills/writing-unit-tests/) | Writes pytest unit tests using mock_context + FetchResponse |
+| [`writing-integration-tests`](skills/writing-integration-tests/) | Writes pytest e2e tests that call real APIs using the live_context fixture |
 
 To use a skill, copy or symlink it into your workspace's `.agents/skills/` directory or your global `~/.config/agents/skills/` directory. See [`skills/README.md`](skills/README.md) for setup instructions.
 

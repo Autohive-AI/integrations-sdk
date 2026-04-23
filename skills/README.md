@@ -6,6 +6,7 @@ Agent skills for AI coding assistants (Amp, Claude Code, etc.) that automate com
 
 | Skill | Description |
 |-------|-------------|
+| [`building-integration/`](building-integration/) | Runs the local build and validation pipeline (structure, lint, format, security, tests) |
 | [`upgrading-sdk-v2/`](upgrading-sdk-v2/) | Upgrades an integration from SDK 1.x to 2.0.0 |
 | [`writing-unit-tests/`](writing-unit-tests/) | Writes pytest unit tests for an integration using mock_context + FetchResponse |
 | [`writing-integration-tests/`](writing-integration-tests/) | Writes pytest e2e integration tests that call real APIs using the live_context fixture |

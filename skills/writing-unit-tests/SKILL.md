@@ -21,6 +21,7 @@ For small integrations (1–10 actions), a single file is fine:
 ```
 myintegration/tests/
 ├── __init__.py
+├── conftest.py
 └── test_myintegration_unit.py
 ```
 
@@ -29,6 +30,7 @@ For large integrations (10+ actions), split by domain:
 ```
 hubspot/tests/
 ├── __init__.py
+├── conftest.py
 ├── test_hubspot_helpers_unit.py
 ├── test_hubspot_contacts_unit.py
 ├── test_hubspot_companies_unit.py
@@ -36,6 +38,18 @@ hubspot/tests/
 ├── test_hubspot_notes_unit.py
 ├── test_hubspot_tickets_unit.py
 └── test_hubspot_misc_unit.py
+```
+
+### conftest.py
+
+Every `tests/` directory should include a `conftest.py` with this standard content:
+
+```python
+import sys
+import os
+
+# Allow 'from context import ...' to work when pytest runs from repo root
+sys.path.insert(0, os.path.dirname(__file__))
 ```
 
 The `_unit.py` suffix is required — CI uses it to discover unit tests.

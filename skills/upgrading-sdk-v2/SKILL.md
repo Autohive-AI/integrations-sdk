@@ -130,6 +130,8 @@ Increment the **major** version since the SDK dependency is a breaking change:
 
 If the integration was already at a higher version (e.g. `1.1.0`), bump to `2.0.0`.
 
+> **This step only applies to existing integrations being upgraded.** A brand-new integration written directly against SDK 2.0.0 should start at `"version": "1.0.0"` — the integration's own version reflects its release history, not the SDK version.
+
 ### Step 5 — Update unit tests (if they exist)
 
 **A. Wrap fetch mocks in FetchResponse:**
@@ -256,7 +258,7 @@ Before considering an integration upgraded, verify:
 - [ ] `ActionError` is imported from the SDK
 - [ ] `"error"` and error-only `"result"` properties removed from output schemas in `config.json`
 - [ ] `requirements.txt` pins `autohive-integrations-sdk~=2.0.0`
-- [ ] `config.json` version is bumped to `2.0.0`
+- [ ] `config.json` version is bumped to `2.0.0` (upgrades only — new integrations stay at `1.0.0`)
 - [ ] Unit test mocks wrap return values in `FetchResponse(...)`
 - [ ] Unit test error assertions use `result.type == ResultType.ACTION_ERROR` and `result.result.message`
 - [ ] `pytest.raises(ValidationError)` replaced with `result.type == ResultType.VALIDATION_ERROR`

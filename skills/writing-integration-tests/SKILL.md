@@ -96,9 +96,11 @@ This is the recommended pattern for any test that needs API credentials: it skip
 
 ### Module-level constants (when you need them everywhere)
 
-If multiple fixtures or helpers need the same env var, define them at module level — but still drive skip behaviour off `env_credentials` inside the fixture, not at import time:
+If multiple fixtures or helpers need the same env var, define them at module level — but still drive skip behaviour off `env_credentials` inside the fixture, not at import time. Add `import os` to the file header alongside the other top-level imports:
 
 ```python
+import os
+
 TEST_ITEM_ID = os.environ.get("MYINTEGRATION_TEST_ITEM_ID", "")
 TEST_PROJECT_ID = os.environ.get("MYINTEGRATION_TEST_PROJECT_ID", "")
 ```

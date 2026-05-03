@@ -49,7 +49,7 @@ This double exclusion ensures integration tests never run accidentally.
 
 ### File Header (boilerplate)
 
-Every integration test file must start with this exact boilerplate. Replace `myintegration` with the actual integration name:
+With `sys.path` set up in `tests/conftest.py` (see the unit tests skill for the standard shape), an integration test file can use plain imports:
 
 ```python
 """
@@ -65,42 +65,47 @@ Never runs in CI — the default pytest marker filter (-m unit) excludes these,
 and the file naming (test_*_integration.py) is not matched by python_files.
 """
 
-import os
-import sys
-import importlib
+import pytest
+from unittest.mock import AsyncMock, MagicMock
+from autohive_integrations_sdk import FetchResponse
+from autohive_integrations_sdk.integration import ResultType
 
-_parent = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_deps = os.path.abspath(os.path.join(os.path.dirname(__file__), "../dependencies"))
-sys.path.insert(0, _parent)
-sys.path.insert(0, _deps)
-
-import pytest  # noqa: E402
-from unittest.mock import MagicMock, AsyncMock  # noqa: E402
-from autohive_integrations_sdk import FetchResponse  # noqa: E402
-
-_spec = importlib.util.spec_from_file_location("myintegration_mod", os.path.join(_parent, "myintegration.py"))
-_mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_mod)
-
-myintegration = _mod.myintegration  # the Integration instance
+from myintegration import myintegration
 
 pytestmark = pytest.mark.integration
 ```
 
+Use the `importlib` fallback boilerplate from the unit tests skill only when plain imports won't work for the integration's layout.
+
 ## Environment Variables
 
-### Token and ID Setup
+### env_credentials Fixture (preferred)
 
-Define environment variables at module level. Use `os.environ.get` with an empty string default:
+The repo-wide [`conftest.py`](https://github.com/Autohive-AI/autohive-integrations/blob/master/conftest.py) provides an `env_credentials` fixture that auto-loads the project `.env` and reads variables on demand:
 
 ```python
-ACCESS_TOKEN = os.environ.get("MYINTEGRATION_ACCESS_TOKEN", "")
+@pytest.fixture
+def live_context(env_credentials, make_context):
+    api_key = env_credentials("MYINTEGRATION_API_KEY")
+    if not api_key:
+        pytest.skip("MYINTEGRATION_API_KEY not set — skipping integration tests")
+    return make_context(auth={"credentials": {"api_key": api_key}})
+```
+
+This is the recommended pattern for any test that needs API credentials: it skips automatically when the env var is missing, integrates with the project `.env`, and avoids per-test boilerplate.
+
+### Module-level constants (when you need them everywhere)
+
+If multiple fixtures or helpers need the same env var, define them at module level — but still drive skip behaviour off `env_credentials` inside the fixture, not at import time:
+
+```python
 TEST_ITEM_ID = os.environ.get("MYINTEGRATION_TEST_ITEM_ID", "")
+TEST_PROJECT_ID = os.environ.get("MYINTEGRATION_TEST_PROJECT_ID", "")
 ```
 
 ### require_* Skip Helpers
 
-For tests that need specific object IDs, create `require_*` helpers that skip gracefully:
+For tests that need specific object IDs (which `env_credentials` doesn't model directly), create `require_*` helpers that skip gracefully:
 
 ```python
 def require_item_id():
@@ -215,7 +220,29 @@ def live_context():
     return ctx
 ```
 
-**How to choose**: Check the integration's `config.json` — if `auth.type` is `"platform"`, use Variant 3. If the action handler reads an API key from `context.auth` or env vars and sets headers manually, use Variant 2. If no auth is needed, use Variant 1.
+### Variant 4: External Python SDK (no `context.fetch`)
+
+Some integrations don't go through `context.fetch` at all — instead they instantiate a third-party Python SDK and let it make the HTTP calls (e.g. `from supadata import Supadata`). For these, the `aiohttp` wrapper is irrelevant: the SDK does its own networking. Just inject the credentials via `make_context` and the upstream library handles the rest:
+
+```python
+@pytest.fixture
+def live_context(env_credentials, make_context):
+    api_key = env_credentials("MYINTEGRATION_API_KEY")
+    if not api_key:
+        pytest.skip("MYINTEGRATION_API_KEY not set — skipping integration tests")
+    return make_context(auth={"credentials": {"api_key": api_key}})
+```
+
+This variant is the simplest of the four — no `real_fetch` definition needed. Use it whenever the integration's source imports a vendor SDK and calls it directly rather than calling `context.fetch`.
+
+**How to choose**:
+
+| Auth shape | Networking | Variant |
+|---|---|---|
+| None (public API) | `context.fetch` | 1 — No auth |
+| API key in `context.auth` or env | `context.fetch` | 2 — API key |
+| Platform OAuth (`config.auth.type == "platform"`) | `context.fetch` | 3 — Platform OAuth |
+| Any | External Python SDK call | 4 — External SDK |
 
 ## The Destructive Marker
 

@@ -42,21 +42,55 @@ hubspot/tests/
 
 ### conftest.py
 
-Every `tests/` directory should include a `conftest.py` with this standard content:
+Every `tests/` directory should include a `conftest.py`. At minimum it puts the integration source on `sys.path` so test files can use plain imports:
 
 ```python
-import sys
 import os
+import sys
 
-# Allow 'from context import ...' to work when pytest runs from repo root
-sys.path.insert(0, os.path.dirname(__file__))
+# Make <integration>.py importable as a top-level module.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+```
+
+This lets test files do `from myintegration import myintegration` (or `from myintegration_module import ...`) without per-file boilerplate.
+
+If the integration reads credentials from `context.auth`, also override the repo-wide `mock_context` fixture here so every test in this directory inherits credentials of the right shape:
+
+```python
+from unittest.mock import AsyncMock, MagicMock
+import pytest
+
+@pytest.fixture
+def mock_context():
+    """Mock ExecutionContext pre-loaded with this integration's credentials."""
+    ctx = MagicMock(name="ExecutionContext")
+    ctx.fetch = AsyncMock(name="fetch")
+    ctx.auth = {"credentials": {"api_key": "test_api_key"}}  # nosec B105
+    return ctx
 ```
 
 The `_unit.py` suffix is required — CI uses it to discover unit tests.
 
 ### File Header (boilerplate)
 
-Every test file must start with this exact boilerplate. Replace `myintegration` with the actual integration name and `myintegration.py` with the actual entry point file:
+Every test file starts with the same shape: imports, an `pytestmark = pytest.mark.unit` line, and the integration imports. With `sys.path` set up in `tests/conftest.py` (above), test files can use plain imports:
+
+```python
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+from autohive_integrations_sdk import FetchResponse
+from autohive_integrations_sdk.integration import ResultType
+
+from myintegration import myintegration
+# Also import any helpers you want to test directly:
+# from myintegration import parse_response, my_helper
+
+pytestmark = pytest.mark.unit
+```
+
+#### Fallback boilerplate (only when plain imports won't work)
+
+If the integration source can't be imported as a normal module — for example when the file lives at an unusual path or has been renamed away from the integration's folder name — use the explicit `importlib` loader:
 
 ```python
 import os
@@ -77,30 +111,30 @@ _spec = importlib.util.spec_from_file_location("myintegration_mod", os.path.join
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
-myintegration = _mod.myintegration  # the Integration instance
-# Also import any helper functions you need to test directly:
-# parse_response = _mod.parse_response
-# my_helper = _mod.my_helper
+myintegration = _mod.myintegration
 
 pytestmark = pytest.mark.unit
 ```
 
-Add `from unittest.mock import patch` if you need to patch `asyncio.sleep` or environment variables.
+Prefer plain imports — reach for the `importlib` form only when there's a concrete reason it's needed.
 
 ### mock_context Fixture
 
-Every test file needs this fixture:
+The repo-wide [`conftest.py`](https://github.com/Autohive-AI/autohive-integrations/blob/master/conftest.py) already provides three fixtures every test can use:
+
+- `mock_context` — minimal `ExecutionContext` with `ctx.auth = {}` and `ctx.fetch` as an `AsyncMock`
+- `make_context` — factory for building a context with arbitrary `auth=...`
+- `env_credentials` — helper that reads env vars (with `.env` autoloaded), returns `None` if missing
+
+You don't need to redeclare these. Override `mock_context` only when the integration reads credentials from `context.auth` and you want every test to inherit the shape — see the snippet in the conftest.py section above.
+
+For one-off credential shapes inside a single test, use `make_context`:
 
 ```python
-@pytest.fixture
-def mock_context():
-    ctx = MagicMock(name="ExecutionContext")
-    ctx.fetch = AsyncMock(name="fetch")
-    ctx.auth = {}
-    return ctx
+async def test_with_custom_auth(make_context):
+    ctx = make_context(auth={"credentials": {"api_key": "different_key"}})  # nosec B105
+    ...
 ```
-
-If the integration reads credentials from `context.auth`, populate it to match the auth shape in `config.json`.
 
 **Platform OAuth** (`config.auth.type == "platform"`): The SDK wraps OAuth tokens in a standard envelope:
 
@@ -361,6 +395,23 @@ class TestParseResponse:
         assert result == {"key": "value"}
 ```
 
+For helpers with several near-identical input/output cases, prefer `@pytest.mark.parametrize` over a separate test method per case — same coverage, easier to extend with new boundary rows:
+
+```python
+class TestMsToTimestamp:
+    @pytest.mark.parametrize(
+        "milliseconds, expected",
+        [
+            (0, "00:00:00,000"),
+            (1000, "00:00:01,000"),
+            (60_000, "00:01:00,000"),
+            (3_600_000, "01:00:00,000"),
+        ],
+    )
+    def test_ms_to_timestamp(self, milliseconds: int, expected: str):
+        assert ms_to_timestamp(milliseconds) == expected
+```
+
 ## Test Organization
 
 ### One class per action
@@ -447,6 +498,8 @@ Every action should have at minimum:
 6. **The `nosec` comment**: Use `# nosec B105` after test token strings to suppress Bandit false positives on hardcoded credentials in tests.
 
 7. **Unused variables**: If you call `execute_action` only to verify `mock_context.fetch.call_args`, don't assign the result to a variable — ruff will flag it as unused. Use `await integration.execute_action(...)` without assignment.
+
+8. **PyPI package name collision**: If your integration folder is named after a PyPI package the source imports (e.g. an integration in `supadata/` that does `from supadata import Supadata`), an empty `<integration>/__init__.py` will shadow the real PyPI package — every test fails with `ImportError`. The fix is to **delete `<integration>/__init__.py`**: the validator treats it as optional, the Lambda runtime is unaffected, and `from <package> import ...` then resolves cleanly to site-packages. Don't paper over the shadow with `site.getsitepackages()` / `importlib` shims in the test files.
 
 ## Reference Implementations
 

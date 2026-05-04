@@ -285,3 +285,17 @@ Before considering an integration upgraded, verify:
 7. **CI fetch pattern linter false positives**: The linter flags any variable named `response` accessed with `.get()` or `["..."]`. If a helper already unwraps `.data` and returns a plain dict, rename the variable in callers to avoid the match (e.g. `gql_result`, `body`, `api_data`).
 
 8. **Ruff config mismatch**: CI uses `../autohive-integrations-tooling/ruff.toml` with `line-length = 120`. Always pass `--config` when formatting or local results will differ from CI.
+
+9. **Audit auth lookup defaults during the upgrade**: 1.0.x integrations sometimes shipped with the wrong default type in their auth lookup, e.g. `context.auth.get("credentials", {}).get("api_key", {})`. The default `{}` returns a dict when the field is unset, which then crashes the upstream API client that expects a string — surfacing as a Lambda 500 / Raygun crash rather than the user-facing auth error it actually is. Fix to a string default that matches the field type:
+
+    ```python
+    # Before — returns {} on missing field, crashes upstream SDK with TypeError
+    api_key = context.auth.get("credentials", {}).get("api_key", {})
+
+    # After — returns "" on missing field; upstream auth error becomes ActionError cleanly
+    api_key = context.auth.get("credentials", {}).get("api_key", "")
+    ```
+
+    The 2.0.0 upgrade is the right time to catch this because you're already touching the auth path to convert error returns to `ActionError`.
+
+10. **PyPI package name collision**: If your integration folder name matches a PyPI package the source imports (e.g. an integration in `supadata/` that does `from supadata import Supadata`), an empty `<integration>/__init__.py` will shadow the real PyPI package and every test fails with `ImportError`. Drop `<integration>/__init__.py` — the validator's "missing __init__.py" warning is correct to ignore in this case, and the Lambda runtime is unaffected (the entry point is the action source file, not the package). See the `writing-unit-tests` skill for the matching test-side guidance.

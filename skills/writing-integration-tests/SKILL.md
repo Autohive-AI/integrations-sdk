@@ -252,6 +252,12 @@ This variant is the simplest of the four — no `real_fetch` definition needed. 
 
 Tests that **create, update, or delete** real data must be marked `@pytest.mark.destructive`. This prevents accidental data mutation when running integration tests.
 
+> Marking a test `@pytest.mark.destructive` does **not** exclude it from
+> `-m integration` runs. Pytest markers are additive: a test carrying both
+> `integration` and `destructive` matches `-m integration`. The marker is a
+> filter target — the protection comes from how you document and invoke the
+> test commands (see "Running Commands" and "Documenting How to Run" below).
+
 ```python
 @pytest.mark.destructive
 class TestCreateItem:
@@ -279,16 +285,42 @@ markers = [
 
 ### Running Commands
 
+> ⚠️ **`-m integration` runs destructive tests too.** Always default to the
+> read-only command below in PR descriptions, READMEs, and reviewer
+> instructions. Reach for the bare `-m integration` form only when you have
+> manually verified the destructive tests are safe to run on the target
+> account.
+
+**Default (safe — use this everywhere by default):**
+
 ```bash
-# Read-only integration tests only
 pytest myintegration/tests/test_myintegration_integration.py -m "integration and not destructive"
+```
 
-# Destructive tests only
+**Destructive only (run deliberately, never by reviewers):**
+
+```bash
 pytest myintegration/tests/test_myintegration_integration.py -m "integration and destructive"
+```
 
-# All integration tests
+**Everything (only after verifying destructive tests are safe on the target account):**
+
+```bash
 pytest myintegration/tests/test_myintegration_integration.py -m integration
 ```
+
+### Documenting How to Run
+
+When the integration has any destructive tests, the PR description and any
+README "How to run" section must:
+
+1. List the **safe command first** (`-m "integration and not destructive"`)
+2. Show the destructive command second, with an explicit warning that it
+   mutates real data on the connected account
+3. Never recommend the bare `-m integration` form as the primary command
+
+This keeps the safe command on the path of least resistance — reviewers
+copy-paste the first command and run only read-only tests.
 
 ## Test Organization
 
@@ -434,6 +466,10 @@ Write actions (create/update/delete) need at least:
    ```bash
    pytest <integration>/tests/test_*_integration.py -m "integration and destructive"
    ```
+9. **Document the run commands** in the PR description and the integration's
+   README — safe (`-m "integration and not destructive"`) command first,
+   destructive command second with a warning. Never recommend the bare
+   `-m integration` form as the primary command.
 
 ## Common Gotchas
 

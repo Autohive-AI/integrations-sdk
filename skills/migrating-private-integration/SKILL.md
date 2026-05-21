@@ -22,7 +22,7 @@ Trigger phrases:
 
 - The integration is being **created from scratch** — it should go straight to the public repo if it's safe; use [building-integration](../building-integration/SKILL.md) and the [starter template](https://github.com/autohive-ai/integrations-sdk/tree/master/samples/template) instead.
 - The integration is being **removed** from the private repo without going public — that's a normal `chore: remove X` PR, not a migration.
-- The integration touches **internal Autohive infrastructure** (`agno-agent`, `file_echo`, `firstaml`, `python-executor`, `testserver`, anything that wraps Dash/internal APIs) — these stay private. If unsure, ask in Slack before doing anything.
+- The integration touches **internal Autohive infrastructure** (`agno-agent`, `file_echo`, `python-executor`, `testserver`, anything that wraps Dash/internal APIs) — these stay private. If unsure, ask in Slack before doing anything.
 
 ## Prerequisites
 
@@ -70,7 +70,7 @@ Expect **zero** real values. Documentation strings like `YOUR_API_KEY`, schema f
 ### 1b. Internal hostnames, employee names, customer references
 
 ```bash
-grep -rni -E "@autohive\.|@firstaml\.|autohive\.io|autohive-internal|dash\.|qa\.|staging\.|kai|alex|lohit|joel" \
+grep -rni -E "@autohive\.|autohive\.io|autohive-internal|dash\.|qa\.|staging\.|kai|alex|lohit|joel" \
   ../integrations/<name>/ \
   --include='*.py' --include='*.json' --include='*.txt' --include='*.md' \
   | grep -v __pycache__

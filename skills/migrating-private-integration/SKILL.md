@@ -109,7 +109,7 @@ Use the `mcp__github__run_secret_scanning` tool (or equivalent CLI) on every tex
 
 Use a table like the one in the Gmail migration PR (`Autohive-AI/autohive-integrations#322`). The reviewer should be able to see at a glance what was checked.
 
-## Step 2 — Identify and drop legacy artefacts
+## Step 2 — Identify and drop legacy artifacts
 
 The private repo accumulates files that don't belong in the public repo. Drop these before copying:
 

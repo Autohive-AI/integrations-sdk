@@ -1,6 +1,6 @@
 ---
 name: writing-integration-tests
-description: "Writes pytest end-to-end integration tests for an Autohive integration that call real APIs using the live_context fixture pattern. Use when asked to write integration tests, add e2e tests, create live API tests, or test an integration against a real service. Covers file structure, live_context fixture variants, environment variable handling, destructive markers, and test organization."
+description: "Writes pytest end-to-end integration tests for an Autohive integration that call real APIs using the live_context fixture pattern. Use when asked to write integration tests, add e2e tests, create live API tests, or test an integration against a real service. Covers file structure, live_context fixture variants, required root .env.example updates, environment variable handling, destructive markers, and test organization."
 ---
 
 # Writing Integration Tests for an Integration
@@ -125,9 +125,18 @@ class TestGetItem:
         ...
 ```
 
-### .env.example Documentation
+### .env.example Documentation (required)
 
-Document all required and optional environment variables in the integration's `.env.example`:
+If an integration test reads any environment variable, you **must** add that variable to the repository root `.env.example` in the same PR. This is not optional documentation — it is part of the integration-test deliverable.
+
+Why this matters:
+- Humans can set up local integration tests without digging through test code for variable names.
+- Automated and AI tooling can discover which credentials, test IDs, and optional knobs it needs to ask for.
+- Reviewers have one canonical place to verify the local test contract.
+
+Add every variable used by `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers. Include both required credentials and optional test resource IDs. Keep real secrets only in local `.env`; never commit `.env`.
+
+Use a clearly labeled block in root `.env.example`:
 
 ```bash
 # -- MyIntegration --
@@ -135,6 +144,8 @@ MYINTEGRATION_ACCESS_TOKEN=
 MYINTEGRATION_TEST_ITEM_ID=
 MYINTEGRATION_TEST_PROJECT_ID=
 ```
+
+Before finishing, cross-check the integration test file against `.env.example`: every env var referenced in tests must appear in `.env.example`, even if the test skips when it is missing.
 
 ## The live_context Fixture
 
@@ -455,7 +466,7 @@ Write actions (create/update/delete) need at least:
 1. **Read the integration source** — understand each action and its auth mechanism
 2. **Check `config.json`** — determine auth type (none / API key / platform OAuth)
 3. **Choose the right `live_context` variant** — see the three variants above
-4. **Document env vars** in `.env.example`
+4. **Document env vars in root `.env.example` (required)** — add every env var referenced by the integration test file in the same PR
 5. **Write read-only tests first** — these are safe to run repeatedly
 6. **Add destructive tests** with `@pytest.mark.destructive` for write actions
 7. **Run read-only tests**:
@@ -483,7 +494,9 @@ Write actions (create/update/delete) need at least:
 
 5. **Destructive test cleanup**: Always clean up created data at the end of lifecycle tests. Use `os.getpid()` in created object names to avoid collisions when running tests in parallel.
 
-6. **OAuth token expiry**: Platform OAuth tokens expire. Document the refresh process in the integration's README or `.env.example`.
+6. **Missing `.env.example` entries**: If you add `env_credentials("FOO")`, `os.environ.get("FOO")`, or similar test env-var usage, add `FOO=` to root `.env.example` before you commit. Do not make reviewers or future contributors grep test files to discover setup requirements.
+
+7. **OAuth token expiry**: Platform OAuth tokens expire. Document the refresh process in the integration's README or root `.env.example`.
 
 ## Reference Implementations
 

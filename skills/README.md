@@ -7,6 +7,8 @@ Agent skills for AI coding assistants (Amp, Claude Code, etc.) that automate com
 | Skill | Description |
 |-------|-------------|
 | [`building-integration/`](building-integration/) | Runs the local build and validation pipeline (structure, lint, format, security, tests) |
+| [`migrating-private-integration/`](migrating-private-integration/) | Migrates an integration from the private repo to the public integrations repo |
+| [`reviewing-integration-prs/`](reviewing-integration-prs/) | Reviews integration PRs for code quality, security, tests, docs, and skill compliance |
 | [`upgrading-sdk-v2/`](upgrading-sdk-v2/) | Upgrades an integration from SDK 1.x to 2.0.0 |
 | [`writing-unit-tests/`](writing-unit-tests/) | Writes pytest unit tests for an integration using mock_context + FetchResponse |
 | [`writing-integration-tests/`](writing-integration-tests/) | Writes pytest e2e integration tests that call real APIs using the live_context fixture |
@@ -46,6 +48,7 @@ Once installed, the skill is automatically available. You can invoke it by:
 
 - Asking your agent to "upgrade this integration to SDK v2"
 - Asking to "migrate to SDK 2.0.0"
+- Asking to "review this integration PR" or "validate this PR against our skills"
 - Explicitly: "use the upgrading-sdk-v2 skill on the bitly integration"
 
 The agent will load the skill's instructions and follow the step-by-step workflow.

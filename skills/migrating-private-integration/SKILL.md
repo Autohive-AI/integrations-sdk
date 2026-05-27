@@ -121,6 +121,7 @@ The private repo accumulates files that don't belong in the public repo. Drop th
 | `__pycache__/`, `.pytest_cache/`, `.ruff_cache/` | Build artefacts. |
 | Internal-only documentation (`INTERNAL.md`, `RUNBOOK.md` referencing internal infra) | Keep in private repo or rewrite without internal references. |
 | `.env*` files | Should not exist anywhere; if they do, abort Step 1. |
+| Migrated integration tests reference env vars but root `.env.example` was not updated | Add blank entries for every referenced env var in the public repo's root `.env.example`. |
 
 ## Step 3 — Copy and adapt files
 
@@ -152,6 +153,7 @@ cp ../integrations/<name>/tests/test_*.py      ../autohive-integrations/<name>/t
   - `## Usage Examples` (1–3 realistic JSON examples)
   - `## Testing`
 - Strip any internal references (Slack channels, Notion links, employee names) from the README before copying.
+- **Root `.env.example`** → if migrated tests read environment variables, add every required and optional test variable to the public repo's root `.env.example` in the same PR. Include variables read through `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers. Do **not** copy private `.env*` files; only add blank template entries such as `MYINTEGRATION_ACCESS_TOKEN=` and `MYINTEGRATION_TEST_ITEM_ID=`.
 
 ### Update the repo-level READMEs
 
@@ -173,6 +175,7 @@ Required outcome:
 - `validate_integration.py` → `0` exit code (warnings about deprecated SDK pin are OK for a pure migration).
 - `check_code.py` → `✅ CODE CHECK PASSED`.
 - `pytest` → no failures (placeholder tests are fine; new tests are out of scope for a migration).
+- If migrated tests reference env vars, root `.env.example` includes all of them as blank template entries.
 
 If anything fails, fix with:
 

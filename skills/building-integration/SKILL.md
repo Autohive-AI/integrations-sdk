@@ -141,16 +141,22 @@ pytest <name>/ -v
 
 Only runs tests in `test_*_unit.py` files (configured in `pyproject.toml`).
 
-### Step 5 — Auto-fix lint and formatting issues
+### Step 5 — Verify `.env.example` for integration-test env vars
 
-If steps 2–4 report ruff errors, auto-fix with:
+If the integration has `test_*_integration.py` files, check whether they reference environment variables via `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers. Every referenced variable must appear as a blank template entry in the repository root `.env.example`.
+
+This is a manual review/build requirement: `.env` stays local and uncommitted, but `.env.example` is the committed contract that tells humans, reviewers, and automation what to provide.
+
+### Step 6 — Auto-fix lint and formatting issues
+
+If steps 2–5 report ruff errors, auto-fix with:
 
 ```bash
 ruff check --fix --config ../autohive-integrations-tooling/ruff.toml <name>
 ruff format --config ../autohive-integrations-tooling/ruff.toml <name>
 ```
 
-Then re-run steps 2–4 to confirm.
+Then re-run steps 2–5 to confirm.
 
 ## Ruff Configuration
 
@@ -169,8 +175,9 @@ Key settings:
 2. Validate structure → `python ../autohive-integrations-tooling/scripts/validate_integration.py <name>`
 3. Check code → `python ../autohive-integrations-tooling/scripts/check_code.py <name>`
 4. Run tests → `pytest <name>/ -v`
-5. Fix issues → `ruff check --fix ...` / `ruff format ...`
-6. Re-run until all pass
+5. Verify integration-test env vars are listed in root `.env.example` (if applicable)
+6. Fix issues → `ruff check --fix ...` / `ruff format ...`
+7. Re-run until all pass
 
 ## Interpreting Output
 
@@ -194,3 +201,4 @@ Key settings:
 | Config-code sync | Ensure actions in `config.json` match handlers in source code |
 | Missing test files | Create `tests/test_<name>_unit.py` (see `writing-unit-tests` skill) |
 | Import errors | Check `requirements.txt` has all dependencies; check `__init__.py` exports |
+| Integration tests use env vars but `.env.example` missing entries | Add blank entries for every referenced env var to root `.env.example` |

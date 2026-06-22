@@ -271,14 +271,16 @@ When no `User-Agent` header is provided, the SDK sends a versioned default using
 AutohiveIntegrationsSDK/<sdk-version> <integration-name>/<integration-version>
 ```
 
-If an API requires a specific `User-Agent`, pass it explicitly. Custom headers are preserved and override the SDK default:
+If an API requires a specific `User-Agent`, pass it explicitly with the `user_agent` convenience argument:
 
 ```python
 response = await context.fetch(
     f"{BASE_URL}/items",
-    headers={"User-Agent": "MyIntegration/1.0"}
+    user_agent="MyIntegration/1.0"
 )
 ```
+
+Existing `headers={"User-Agent": "..."}` usage is also supported and takes precedence over `user_agent` when both are provided.
 
 ```python
 # GET with query parameters

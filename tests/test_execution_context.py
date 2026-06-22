@@ -169,6 +169,32 @@ async def test_fetch_user_agent_header_can_be_overridden(mock_aio):
     assert request.kwargs["headers"]["User-Agent"] == "CustomIntegration/1.0"
 
 
+async def test_fetch_user_agent_argument_sets_user_agent(mock_aio):
+    mock_aio.get(BASE_URL, payload={"ok": True})
+
+    async with ExecutionContext() as ctx:
+        await ctx.fetch(BASE_URL, user_agent="CustomIntegration/1.0")
+
+    key = ("GET", URL(BASE_URL))
+    request = mock_aio.requests[key][0]
+    assert request.kwargs["headers"]["User-Agent"] == "CustomIntegration/1.0"
+
+
+async def test_fetch_user_agent_header_takes_precedence_over_argument(mock_aio):
+    mock_aio.get(BASE_URL, payload={"ok": True})
+
+    async with ExecutionContext() as ctx:
+        await ctx.fetch(
+            BASE_URL,
+            headers={"User-Agent": "HeaderIntegration/1.0"},
+            user_agent="ArgumentIntegration/1.0",
+        )
+
+    key = ("GET", URL(BASE_URL))
+    request = mock_aio.requests[key][0]
+    assert request.kwargs["headers"]["User-Agent"] == "HeaderIntegration/1.0"
+
+
 async def test_fetch_lowercase_user_agent_header_can_be_overridden(mock_aio):
     mock_aio.get(BASE_URL, payload={"ok": True})
 

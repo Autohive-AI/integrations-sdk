@@ -435,14 +435,16 @@ class ExecutionContext:
             headers: Optional[Dict[str, str]] = None,
             content_type: Optional[str] = None,
             timeout: Optional[int] = None,
-            retry_count: int = 0
+            retry_count: int = 0,
+            user_agent: Optional[str] = None
     ) -> FetchResponse:
         """Make an HTTP request with automatic retries and error handling.
 
         If no ``User-Agent`` header is provided, a default SDK ``User-Agent`` is
         added.  When the request is made inside a handler executed by
         ``Integration``, the integration's ``config.json`` name and version are
-        included.  Explicit ``User-Agent`` headers always take precedence.
+        included.  Pass ``user_agent`` to set a per-request value more easily.
+        Explicit ``User-Agent`` headers always take precedence.
 
         For **platform OAuth** integrations (``auth_type == "PlatformOauth2"``),
         a ``Bearer`` token is auto-injected from ``auth.credentials.access_token``
@@ -461,7 +463,10 @@ class ExecutionContext:
             json: JSON-serializable payload.  Sets ``content_type`` to
                 ``application/json`` automatically.
             headers: Additional HTTP headers.  Merged *after* any auto-injected
-                auth header, so an explicit ``Authorization`` takes precedence.
+                auth header, so explicit ``Authorization`` and ``User-Agent``
+                values take precedence.
+            user_agent: Convenience override for the request ``User-Agent``.
+                Ignored when ``headers`` already contains a ``User-Agent`` key.
             content_type: ``Content-Type`` header value.
             timeout: Per-request timeout in seconds (overrides ``request_config``).
             retry_count: Internal — current retry attempt number.
@@ -485,7 +490,7 @@ class ExecutionContext:
         final_headers = {}
 
         if not any(key.lower() == "user-agent" for key in (headers or {})):
-            final_headers["User-Agent"] = self._build_default_user_agent()
+            final_headers["User-Agent"] = user_agent or self._build_default_user_agent()
         
         if self.auth and "Authorization" not in (headers or {}):
             auth_type = AuthType(self.auth.get("auth_type", "PlatformOauth2"))
@@ -577,7 +582,8 @@ class ExecutionContext:
                 # Use original_timeout (numeric) for recursive calls
                 return await self.fetch(
                     url, method, params, data, json,
-                    headers, content_type, original_timeout, retry_count + 1
+                    headers, content_type, original_timeout, retry_count + 1,
+                    user_agent=user_agent,
                 )
             else:
                 print("Max retries reached. Raising error.")

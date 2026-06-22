@@ -8,6 +8,7 @@ from aioresponses import aioresponses
 from yarl import URL
 
 from autohive_integrations_sdk import (
+    __version__,
     ExecutionContext,
     HTTPError,
     RateLimitError,
@@ -126,6 +127,58 @@ async def test_fetch_no_auth_injection_when_header_provided(mock_aio):
     key = ("GET", URL(BASE_URL))
     request = mock_aio.requests[key][0]
     assert request.kwargs["headers"]["Authorization"] == "Custom xyz"
+
+
+# ── User-Agent ──────────────────────────────────────────────────────────────
+
+
+async def test_fetch_sets_default_user_agent(mock_aio):
+    mock_aio.get(BASE_URL, payload={"ok": True})
+
+    async with ExecutionContext() as ctx:
+        await ctx.fetch(BASE_URL)
+
+    key = ("GET", URL(BASE_URL))
+    request = mock_aio.requests[key][0]
+    assert request.kwargs["headers"]["User-Agent"] == f"AutohiveIntegrationsSDK/{__version__}"
+
+
+async def test_fetch_default_user_agent_includes_integration_identity(mock_aio):
+    mock_aio.get(BASE_URL, payload={"ok": True})
+
+    async with ExecutionContext() as ctx:
+        ctx._set_integration_identity("My Integration", "1.0.0 beta")
+        await ctx.fetch(BASE_URL)
+
+    key = ("GET", URL(BASE_URL))
+    request = mock_aio.requests[key][0]
+    assert (
+        request.kwargs["headers"]["User-Agent"]
+        == f"AutohiveIntegrationsSDK/{__version__} My-Integration/1.0.0-beta"
+    )
+
+
+async def test_fetch_user_agent_header_can_be_overridden(mock_aio):
+    mock_aio.get(BASE_URL, payload={"ok": True})
+
+    async with ExecutionContext() as ctx:
+        await ctx.fetch(BASE_URL, headers={"User-Agent": "CustomIntegration/1.0"})
+
+    key = ("GET", URL(BASE_URL))
+    request = mock_aio.requests[key][0]
+    assert request.kwargs["headers"]["User-Agent"] == "CustomIntegration/1.0"
+
+
+async def test_fetch_lowercase_user_agent_header_can_be_overridden(mock_aio):
+    mock_aio.get(BASE_URL, payload={"ok": True})
+
+    async with ExecutionContext() as ctx:
+        await ctx.fetch(BASE_URL, headers={"user-agent": "CustomIntegration/1.0"})
+
+    key = ("GET", URL(BASE_URL))
+    request = mock_aio.requests[key][0]
+    assert "User-Agent" not in request.kwargs["headers"]
+    assert request.kwargs["headers"]["user-agent"] == "CustomIntegration/1.0"
 
 
 # ── Query params ─────────────────────────────────────────────────────────────

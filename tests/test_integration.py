@@ -4,8 +4,11 @@ import json
 from datetime import timedelta
 
 import pytest
+from aioresponses import aioresponses
+from yarl import URL
 
 from autohive_integrations_sdk import (
+    __version__,
     Integration,
     ExecutionContext,
     ActionHandler,
@@ -95,6 +98,45 @@ async def test_execute_action_with_cost(integration):
 
     assert result.type == ResultType.ACTION
     assert result.result.cost_usd == 0.05
+
+
+async def test_execute_action_applies_integration_identity_to_fetch_user_agent(integration):
+    url = "https://api.example.com/resource"
+
+    @integration.action("test_action")
+    class Handler(ActionHandler):
+        async def execute(self, inputs, context):
+            await context.fetch(url)
+            return ActionResult(data={"greeting": "hi"})
+
+    with aioresponses() as mock_aio:
+        mock_aio.get(url, payload={"ok": True})
+
+        ctx = ExecutionContext(auth={"api_key": "k"})
+        result = await integration.execute_action("test_action", {"name": "x"}, ctx)
+
+    request = mock_aio.requests[("GET", URL(url))][0]
+    assert result.type == ResultType.ACTION
+    assert (
+        request.kwargs["headers"]["User-Agent"]
+        == f"AutohiveIntegrationsSDK/{__version__} test-integration/0.1.0"
+    )
+
+
+async def test_execute_action_restores_previous_context_integration_identity(integration):
+    @integration.action("test_action")
+    class Handler(ActionHandler):
+        async def execute(self, inputs, context):
+            return ActionResult(data={"greeting": "hi"})
+
+    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx._set_integration_identity("previous-integration", "9.9.9")
+
+    result = await integration.execute_action("test_action", {"name": "x"}, ctx)
+
+    assert result.type == ResultType.ACTION
+    assert ctx._integration_name == "previous-integration"
+    assert ctx._integration_version == "9.9.9"
 
 
 async def test_execute_action_invalid_inputs(integration):

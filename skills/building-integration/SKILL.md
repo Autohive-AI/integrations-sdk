@@ -145,7 +145,16 @@ Only runs tests in `test_*_unit.py` files (configured in `pyproject.toml`).
 
 If the integration has `test_*_integration.py` files, check whether they reference environment variables via `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers. Every referenced variable must appear as a blank template entry in the repository root `.env.example`.
 
-This is a manual review/build requirement: `.env` stays local and uncommitted, but `.env.example` is the committed contract that tells humans, reviewers, and automation what to provide.
+This is a manual review/build requirement: `.env` stays local and uncommitted, but `.env.example` is the committed contract that tells humans, reviewers, and automation what to provide. Missing entries should be treated as a validation failure for PRs adding or changing integration tests.
+
+Use a focused cross-check:
+
+```bash
+grep -RInE 'env_credentials\(|os\.environ|getenv\(' <name>/tests/test_*_integration.py
+grep -nE 'INTEGRATION_PREFIX|SERVICE_PREFIX' .env.example
+```
+
+Document required credentials, optional test IDs, and destructive-test-only variables. If an env var read is unused, remove it rather than documenting unnecessary setup.
 
 ### Step 6 — Auto-fix lint and formatting issues
 
@@ -201,4 +210,4 @@ Key settings:
 | Config-code sync | Ensure actions in `config.json` match handlers in source code |
 | Missing test files | Create `tests/test_<name>_unit.py` (see `writing-unit-tests` skill) |
 | Import errors | Check `requirements.txt` has all dependencies; check `__init__.py` exports |
-| Integration tests use env vars but `.env.example` missing entries | Add blank entries for every referenced env var to root `.env.example` |
+| Integration tests use env vars but `.env.example` missing entries | Add blank entries for every referenced env var to root `.env.example`; treat as blocking for PRs adding/changing integration tests |

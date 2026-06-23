@@ -5,6 +5,18 @@ description: "Writes pytest end-to-end integration tests for an Autohive integra
 
 # Writing Integration Tests for an Integration
 
+## Required: root `.env.example` update
+
+If a PR adds or changes integration tests that read environment variables, it must update the repository root `.env.example` in the same PR. This is part of the integration-test deliverable, not optional documentation.
+
+This applies to every variable read through `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers, including:
+
+- Required credentials such as access tokens and API keys
+- Optional test resource IDs used to avoid list→get chaining
+- Variables used only by destructive tests
+
+If a variable is read by the test file, either add a blank template entry to root `.env.example` or remove the unused env-var read. Missing entries should block integration-test PRs until fixed.
+
 ## Prerequisites
 
 - The integration must be on **SDK 2.0.0** (`autohive-integrations-sdk~=2.0.0` in `requirements.txt`)
@@ -134,7 +146,16 @@ Why this matters:
 - Automated and AI tooling can discover which credentials, test IDs, and optional knobs it needs to ask for.
 - Reviewers have one canonical place to verify the local test contract.
 
-Add every variable used by `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers. Include both required credentials and optional test resource IDs. Keep real secrets only in local `.env`; never commit `.env`.
+Add every variable used by `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers. Include required credentials, optional test resource IDs, and destructive-test-only variables. Keep real secrets only in local `.env`; never commit `.env`.
+
+Before finishing, run a focused cross-check:
+
+```bash
+grep -RInE 'env_credentials\(|os\.environ|getenv\(' <integration>/tests/test_*_integration.py
+grep -nE 'MYINTEGRATION|SERVICE_PREFIX' .env.example
+```
+
+Every env var found in the integration test file must be present as a blank template entry in root `.env.example`. If the variable is no longer used by tests, remove the env-var read instead of documenting unnecessary setup.
 
 Use a clearly labeled block in root `.env.example`:
 
@@ -145,7 +166,7 @@ MYINTEGRATION_TEST_ITEM_ID=
 MYINTEGRATION_TEST_PROJECT_ID=
 ```
 
-Before finishing, cross-check the integration test file against `.env.example`: every env var referenced in tests must appear in `.env.example`, even if the test skips when it is missing.
+Before finishing, cross-check the integration test file against `.env.example`: every env var referenced in tests must appear in `.env.example`, even if the test skips when it is missing or the variable is optional.
 
 ## The live_context Fixture
 
@@ -466,7 +487,7 @@ Write actions (create/update/delete) need at least:
 1. **Read the integration source** — understand each action and its auth mechanism
 2. **Check `config.json`** — determine auth type (none / API key / platform OAuth)
 3. **Choose the right `live_context` variant** — see the three variants above
-4. **Document env vars in root `.env.example` (required)** — add every env var referenced by the integration test file in the same PR
+4. **Document env vars in root `.env.example` (required)** — add every env var referenced by the integration test file in the same PR; missing entries should block integration-test PRs
 5. **Write read-only tests first** — these are safe to run repeatedly
 6. **Add destructive tests** with `@pytest.mark.destructive` for write actions
 7. **Run read-only tests**:
@@ -494,7 +515,7 @@ Write actions (create/update/delete) need at least:
 
 5. **Destructive test cleanup**: Always clean up created data at the end of lifecycle tests. Use `os.getpid()` in created object names to avoid collisions when running tests in parallel.
 
-6. **Missing `.env.example` entries**: If you add `env_credentials("FOO")`, `os.environ.get("FOO")`, or similar test env-var usage, add `FOO=` to root `.env.example` before you commit. Do not make reviewers or future contributors grep test files to discover setup requirements.
+6. **Missing `.env.example` entries**: If you add `env_credentials("FOO")`, `os.environ.get("FOO")`, `os.getenv("FOO")`, `os.environ["FOO"]`, or similar test env-var usage, add `FOO=` to root `.env.example` before you commit. Do not make reviewers or future contributors grep test files to discover setup requirements. Optional IDs and destructive-test-only variables count too.
 
 7. **OAuth token expiry**: Platform OAuth tokens expire. Document the refresh process in the integration's README or root `.env.example`.
 

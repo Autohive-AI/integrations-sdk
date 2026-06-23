@@ -103,6 +103,18 @@ Check for:
 
 For migrations to public, apply the `migrating-private-integration` security/safety/secrets checklist. Security review should be explicit in the PR body.
 
+### 4.1 Custom auth contract review
+
+For integrations using `auth.type == "custom"`, verify the config, code, and tests match the Autohive runtime contract:
+
+- `auth.fields.required` is absent or empty. Non-empty custom-auth `required` arrays are blockers because credential presence is handled by the platform connection flow, not integration JSON Schema validation.
+- `auth.fields.properties` declares every credential field that action code reads from `context.auth`.
+- Action code does not read undeclared credential keys from `context.auth`.
+- At least one unit test exercises `integration.execute_action(...)` with the expected SDK/platform auth shape, rather than only testing helper functions or using a convenient mock shape.
+- Live integration tests, if present, are not treated as CI coverage unless the CI logs explicitly show they were run.
+
+Ask explicitly during review: **Does this PR test the same SDK/platform contract that production will use?**
+
 ### 5. Tests and `.env.example`
 
 The root `.env.example` check is mandatory for any PR that adds or changes `test_*_integration.py`. Do not rely on CI to catch this; review it manually against the test file.

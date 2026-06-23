@@ -210,7 +210,7 @@ async def real_fetch(url, *, method="GET", json=None, headers=None, **kwargs):
             )
 ```
 
-If the integration tests read credentials or test resource IDs from environment variables, also verify the repository root `.env.example` lists every variable used by those tests. Add missing entries in the same PR. This applies to variables read through `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers. The local `.env` file remains uncommitted; `.env.example` is the committed setup contract for humans and tooling.
+If the integration tests read credentials or test resource IDs from environment variables, also verify the repository root `.env.example` lists every variable used by those tests. Add missing entries in the same PR. This applies to variables read through `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers. Required credentials, optional test IDs, and destructive-test-only variables all count. The local `.env` file remains uncommitted; `.env.example` is the committed setup contract for humans and tooling. Missing entries should block SDK-upgrade PRs that add or change integration tests.
 
 ### Step 7 — Local validation (required before pushing)
 
@@ -265,7 +265,7 @@ Before considering an integration upgraded, verify:
 - [ ] Unit test error assertions use `result.type == ResultType.ACTION_ERROR` and `result.result.message`
 - [ ] `pytest.raises(ValidationError)` replaced with `result.type == ResultType.VALIDATION_ERROR`
 - [ ] Integration test `real_fetch` returns `FetchResponse(...)` (if applicable)
-- [ ] Integration test env vars are documented in root `.env.example` (if integration tests read env vars)
+- [ ] Integration test env vars are documented in root `.env.example` (if integration tests read env vars, including optional and destructive-test-only variables)
 - [ ] `FetchResponse` and `ResultType` are imported where needed
 - [ ] All unit tests pass
 - [ ] `ruff check` and `ruff format --config ../autohive-integrations-tooling/ruff.toml` pass
@@ -303,4 +303,4 @@ Before considering an integration upgraded, verify:
 
 10. **PyPI package name collision**: If your integration folder name matches a PyPI package the source imports (e.g. an integration in `supadata/` that does `from supadata import Supadata`), an empty `<integration>/__init__.py` will shadow the real PyPI package and every test fails with `ImportError`. Drop `<integration>/__init__.py` — the validator's "missing __init__.py" warning is correct to ignore in this case, and the Lambda runtime is unaffected (the entry point is the action source file, not the package). See the `writing-unit-tests` skill for the matching test-side guidance.
 
-11. **Missing `.env.example` entries after touching integration tests**: SDK upgrades often touch `live_context` and credential handling. If the integration test file references `FOO_ACCESS_TOKEN`, `FOO_TEST_ID`, or similar, root `.env.example` must contain `FOO_ACCESS_TOKEN=`, `FOO_TEST_ID=`, etc. Do not rely on future contributors or automation to grep test code for setup requirements.
+11. **Missing `.env.example` entries after touching integration tests**: SDK upgrades often touch `live_context` and credential handling. If the integration test file references `FOO_ACCESS_TOKEN`, `FOO_TEST_ID`, or similar, root `.env.example` must contain `FOO_ACCESS_TOKEN=`, `FOO_TEST_ID=`, etc. Optional IDs and destructive-test-only variables count too. Do not rely on future contributors or automation to grep test code for setup requirements; missing entries should block PRs that add or change those tests.

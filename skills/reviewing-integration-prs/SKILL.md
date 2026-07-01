@@ -14,6 +14,7 @@ The goal is not just a generic code review. Validate the PR against the relevant
 - Review the actual diff and the surrounding integration code; do not rely only on CI status.
 - Treat security and secret leakage as blockers.
 - Treat failed tooling/validation as blockers unless there is a documented, intentional exception.
+- Treat missing root `.env.example` entries as blockers when a PR adds or changes integration tests that read env vars.
 - Use the existing skills as sub-skill checklists when their context applies.
 - Prefer actionable review comments with file/line references and concrete fixes.
 - Separate blockers from should-fix items and minor suggestions.
@@ -102,7 +103,23 @@ Check for:
 
 For migrations to public, apply the `migrating-private-integration` security/safety/secrets checklist. Security review should be explicit in the PR body.
 
+### 4.1 Custom auth contract review
+
+For integrations using `auth.type == "custom"`, verify the config, code, and tests match the Autohive runtime contract:
+
+- `auth.fields` describes the same auth object shape the SDK/platform passes to `context.auth` at execution time. Do not assume flat or wrapped credentials without checking the current SDK/platform contract.
+- If `auth.fields.required` is present, it matches that runtime auth shape and covers credentials that must be present before handlers run. Non-empty `required` arrays are valid when they match the SDK/platform contract.
+- `auth.fields.properties` declares every credential field that action code reads from `context.auth`, including nested credential fields if the runtime contract is wrapped.
+- Action code does not read undeclared credential keys from `context.auth`.
+- At least one unit test exercises `integration.execute_action(...)` with the expected SDK/platform auth shape, rather than only testing helper functions or using a convenient mock shape.
+- Tests cover missing required credentials when the config uses `auth.fields.required`, so credential validation is not accidentally bypassed.
+- Live integration tests, if present, are not treated as CI coverage unless the CI logs explicitly show they were run.
+
+Ask explicitly during review: **Does this PR test the same SDK/platform contract that production will use?**
+
 ### 5. Tests and `.env.example`
+
+The root `.env.example` check is mandatory for any PR that adds or changes `test_*_integration.py`. Do not rely on CI to catch this; review it manually against the test file.
 
 For unit tests, apply `writing-unit-tests`:
 
@@ -118,8 +135,16 @@ For integration tests, apply `writing-integration-tests`:
 - `live_context` returns `FetchResponse` for SDK 2.x `context.fetch` paths.
 - Tests skip cleanly when credentials or required test IDs are missing.
 - Every env var read by `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers is listed as a blank template entry in root `.env.example`.
+- Optional test IDs, destructive-test-only variables, and module-level env constants count; either document them in root `.env.example` or remove unused reads.
 
-Missing `.env.example` entries are a should-fix at minimum, and often a blocker for PRs whose main purpose is adding/changing integration tests.
+Use a focused search while reviewing:
+
+```bash
+grep -RInE 'env_credentials\(|os\.environ|getenv\(' <integration>/tests/test_*_integration.py
+grep -nE 'INTEGRATION_PREFIX|SERVICE_PREFIX' .env.example
+```
+
+Missing `.env.example` entries are blockers when the PR adds or changes integration tests that read env vars. If the PR only exposes a pre-existing omission outside the changed tests, call it a should-fix unless it blocks the changed behavior.
 
 ### 6. SDK v2 upgrade review
 
@@ -147,8 +172,8 @@ Check:
 
 Use these categories:
 
-- **🚫 Blocker** — must fix before merge. Security leaks, broken validation, schema/action mismatch, new integration input drift, missing required files, broken imports/tests, unsafe public migration.
-- **⚠️ Should-fix** — strongly recommended before merge. Missing `.env.example` entries, incomplete test coverage for changed behavior, unclear docs, overly broad error handling, avoidable warnings.
+- **🚫 Blocker** — must fix before merge. Security leaks, broken validation, schema/action mismatch, new integration input drift, missing required files, broken imports/tests, unsafe public migration, or missing root `.env.example` entries for env vars read by newly added/changed integration tests.
+- **⚠️ Should-fix** — strongly recommended before merge. Pre-existing `.env.example` omissions not introduced by the PR, incomplete test coverage for changed behavior, unclear docs, overly broad error handling, avoidable warnings.
 - **💡 Suggestion** — optional improvements. Naming clarity, small refactors, additional examples, extra edge-case tests.
 
 ## Review Output Template
@@ -184,5 +209,5 @@ Before completing the review, verify:
 - [ ] Tooling/CI status was checked or local validation was run.
 - [ ] Config/code/schema sync was inspected.
 - [ ] Unit/integration test changes were reviewed against the appropriate test skill.
-- [ ] Root `.env.example` was checked when integration tests reference env vars.
+- [ ] Root `.env.example` was checked when integration tests reference env vars; missing entries introduced by the PR were treated as blockers.
 - [ ] Findings are actionable and severity-labelled.

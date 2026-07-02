@@ -263,7 +263,24 @@ class GetItemsAction(ActionHandler):
 
 ### Making HTTP Requests
 
-Use `context.fetch()` for all HTTP calls. It handles authentication headers, retries, timeouts, and response parsing automatically. It returns a `FetchResponse` object — access the parsed body via `.data`, the HTTP status via `.status`, and response headers via `.headers`.
+Use `context.fetch()` for all HTTP calls. It handles authentication headers, a default `User-Agent`, retries, timeouts, and response parsing automatically. It returns a `FetchResponse` object — access the parsed body via `.data`, the HTTP status via `.status`, and response headers via `.headers`.
+
+When no `User-Agent` header is provided, the SDK sends a versioned default using the SDK version and, when the request is made from a registered integration handler, the integration `name` and `version` from `config.json`:
+
+```text
+AutohiveIntegrationsSDK/<sdk-version> <integration-name>/<integration-version>
+```
+
+If an API requires a specific `User-Agent`, pass it explicitly with the `user_agent` convenience argument:
+
+```python
+response = await context.fetch(
+    f"{BASE_URL}/items",
+    user_agent="MyIntegration/1.0"
+)
+```
+
+Existing `headers={"User-Agent": "..."}` usage is also supported and takes precedence over `user_agent` when both are provided.
 
 ```python
 # GET with query parameters

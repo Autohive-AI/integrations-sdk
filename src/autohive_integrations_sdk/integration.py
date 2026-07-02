@@ -35,6 +35,7 @@ import json
 import json as jsonX  # Keep alias to avoid conflict with 'json' parameter in fetch
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union, Type, TypeVar, Generic, ClassVar
@@ -51,6 +52,18 @@ from autohive_integrations_sdk import __version__
 
 # ---- Type Definitions ----
 T = TypeVar('T')
+
+_USER_AGENT_TOKEN_RE = re.compile(r"[^A-Za-z0-9!#$%&'*+.^_`|~-]+")
+
+
+def _sanitize_user_agent_token(value: Any) -> str:
+    """Return a safe User-Agent product token component."""
+    token = _USER_AGENT_TOKEN_RE.sub("-", str(value)).strip("-")
+    return token or "unknown"
+
+
+DEFAULT_USER_AGENT = f"AutohiveIntegrationsSDK/{_sanitize_user_agent_token(__version__)}"
+"""Default User-Agent sent by ``ExecutionContext.fetch()`` when not overridden."""
 
 # ---- Auth Types ----
 class AuthType(Enum):
@@ -350,8 +363,9 @@ class ConnectedAccountHandler(ABC):
 class ExecutionContext:
     """Context provided to integration handlers for making authenticated HTTP requests.
 
-    Manages an ``aiohttp`` session with automatic retries, error handling, and
-    optional Bearer-token injection for platform OAuth integrations.
+    Manages an ``aiohttp`` session with automatic retries, error handling,
+    default ``User-Agent`` handling, and optional Bearer-token injection for
+    platform OAuth integrations.
 
     Use as an async context manager::
 
@@ -383,6 +397,8 @@ class ExecutionContext:
         self.logger = logger or logging.getLogger(__name__)
         """Logger instance"""
         self._session: Optional[aiohttp.ClientSession] = None
+        self._integration_name: Optional[str] = None
+        self._integration_version: Optional[str] = None
 
     async def __aenter__(self):
         if not self._session:
@@ -394,6 +410,21 @@ class ExecutionContext:
             await self._session.close()
             self._session = None
 
+    def _set_integration_identity(self, name: Optional[str], version: Optional[str]) -> None:
+        """Attach integration identity for SDK-generated request metadata."""
+        self._integration_name = name
+        self._integration_version = version
+
+    def _build_default_user_agent(self) -> str:
+        if self._integration_name and self._integration_version:
+            integration_token = (
+                f"{_sanitize_user_agent_token(self._integration_name)}/"
+                f"{_sanitize_user_agent_token(self._integration_version)}"
+            )
+            return f"{DEFAULT_USER_AGENT} {integration_token}"
+
+        return DEFAULT_USER_AGENT
+
     async def fetch(
             self,
             url: str,
@@ -404,9 +435,16 @@ class ExecutionContext:
             headers: Optional[Dict[str, str]] = None,
             content_type: Optional[str] = None,
             timeout: Optional[int] = None,
-            retry_count: int = 0
+            retry_count: int = 0,
+            user_agent: Optional[str] = None
     ) -> FetchResponse:
         """Make an HTTP request with automatic retries and error handling.
+
+        If no ``User-Agent`` header is provided, a default SDK ``User-Agent`` is
+        added.  When the request is made inside a handler executed by
+        ``Integration``, the integration's ``config.json`` name and version are
+        included.  Pass ``user_agent`` to set a per-request value more easily.
+        Explicit ``User-Agent`` headers always take precedence.
 
         For **platform OAuth** integrations (``auth_type == "PlatformOauth2"``),
         a ``Bearer`` token is auto-injected from ``auth.credentials.access_token``
@@ -425,7 +463,10 @@ class ExecutionContext:
             json: JSON-serializable payload.  Sets ``content_type`` to
                 ``application/json`` automatically.
             headers: Additional HTTP headers.  Merged *after* any auto-injected
-                auth header, so an explicit ``Authorization`` takes precedence.
+                auth header, so explicit ``Authorization`` and ``User-Agent``
+                values take precedence.
+            user_agent: Convenience override for the request ``User-Agent``.
+                Ignored when ``headers`` already contains a ``User-Agent`` key.
             content_type: ``Content-Type`` header value.
             timeout: Per-request timeout in seconds (overrides ``request_config``).
             retry_count: Internal — current retry attempt number.
@@ -447,6 +488,9 @@ class ExecutionContext:
             content_type = "application/json"
 
         final_headers = {}
+
+        if not any(key.lower() == "user-agent" for key in (headers or {})):
+            final_headers["User-Agent"] = user_agent or self._build_default_user_agent()
         
         if self.auth and "Authorization" not in (headers or {}):
             auth_type = AuthType(self.auth.get("auth_type", "PlatformOauth2"))
@@ -538,7 +582,8 @@ class ExecutionContext:
                 # Use original_timeout (numeric) for recursive calls
                 return await self.fetch(
                     url, method, params, data, json,
-                    headers, content_type, original_timeout, retry_count + 1
+                    headers, content_type, original_timeout, retry_count + 1,
+                    user_agent=user_agent,
                 )
             else:
                 print("Max retries reached. Raising error.")
@@ -785,7 +830,12 @@ class Integration:
 
             # Create handler instance and execute
             handler = self._action_handlers[name]()
-            result = await handler.execute(inputs, context)
+            previous_identity = (context._integration_name, context._integration_version)
+            context._set_integration_identity(self.config.name, self.config.version)
+            try:
+                result = await handler.execute(inputs, context)
+            finally:
+                context._set_integration_identity(*previous_identity)
 
             # Handle ActionError - skip output schema validation
             if isinstance(result, ActionError):
@@ -866,7 +916,12 @@ class Integration:
         
         # Create handler instance and execute
         handler = self._polling_handlers[name]()
-        records = await handler.poll(inputs, last_poll_ts, context)
+        previous_identity = (context._integration_name, context._integration_version)
+        context._set_integration_identity(self.config.name, self.config.version)
+        try:
+            records = await handler.poll(inputs, last_poll_ts, context)
+        finally:
+            context._set_integration_identity(*previous_identity)
         # Validate each record
         for record in records:
             if "id" not in record:
@@ -910,7 +965,12 @@ class Integration:
                 raise ValidationError(message, auth_config, context.auth)
 
         handler = self._connected_account_handler()
-        account_info = await handler.get_account_info(context)
+        previous_identity = (context._integration_name, context._integration_version)
+        context._set_integration_identity(self.config.name, self.config.version)
+        try:
+            account_info = await handler.get_account_info(context)
+        finally:
+            context._set_integration_identity(*previous_identity)
 
         if not isinstance(account_info, ConnectedAccountInfo):
             raise ValidationError(

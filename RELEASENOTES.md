@@ -1,10 +1,14 @@
 # Release Notes
 
-## 3.0.0
+## 2.0.1
 
-### Breaking Change
+### Behavior Change
 
-Auth validation now expects the platform auth envelope only. Flat auth is no longer supported.
+Auth validation now expects the platform auth envelope only. Flat auth is no
+longer accepted. Production runtime behavior is unchanged (the platform has
+always sent the envelope); this release fixes the SDK to validate the object
+production actually sends. Local tests and scripts that construct flat auth
+contexts must migrate to the wrapped shape.
 
 The platform delivers integration auth as a wrapped envelope:
 
@@ -18,7 +22,7 @@ object. Previously the SDK validated the *entire* envelope against
 (the ActiveCampaign outage), while an empty `required` list passed vacuously
 even with empty credentials.
 
-As of 3.0.0 the SDK validates only `context.auth["credentials"]` against
+As of 2.0.1 the SDK validates only `context.auth["credentials"]` against
 `auth.fields`. `auth.fields.required` is now honoured and recommended. If
 `context.auth` is not a wrapped envelope with a `credentials` dict, validation
 fails with a `VALIDATION_ERROR` whose `source` is `"auth"`.
@@ -28,7 +32,7 @@ fails with a `VALIDATION_ERROR` whose `source` is `"auth"`.
 ctx = ExecutionContext(auth={"api_key": "..."})  # flat
 ```
 
-**After (3.0):**
+**After (2.0.1):**
 ```python
 ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "..."}})
 ```
@@ -48,8 +52,9 @@ ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "
    ```
 3. **Keep `auth.fields.required`** — it is now enforced against the credentials
    object and is the recommended way to require credentials.
-4. **Pin the SDK with `~=`** so each integration opts in to 3.0.0 explicitly;
-   there is no flat-auth backward compatibility.
+4. **Note on pins:** `~=2.0.0` pins resolve to 2.0.1 automatically on the next
+   rebuild; there is no flat-auth backward compatibility, so migrate tests
+   before rebuilding. Pin `~=2.0.1` to express the requirement explicitly.
 
 ## 2.0.0
 

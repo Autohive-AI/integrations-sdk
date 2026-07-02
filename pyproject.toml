@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autohive_integrations_sdk"
-version = "3.0.0"
+version = "2.0.1"
 authors = [
   { name="Reilly Oldham", email="reilly@autohive.com" },
   { name="Kai Koenig", email="kai@autohive.com" },

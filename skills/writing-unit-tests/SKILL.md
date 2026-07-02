@@ -145,7 +145,7 @@ ctx.auth = {
 }
 ```
 
-**Custom auth** (`config.auth.type == "custom"`): As of SDK 3.0.0 the platform always passes `context.auth` as the wrapped envelope `{"auth_type": ..., "credentials": {...}}`, and the SDK validates the inner `credentials` object against `config.auth.fields`. Use the wrapped envelope with a non-empty `auth_type` and put the field values under `credentials`:
+**Custom auth** (`config.auth.type == "custom"`): As of SDK 2.0.1 the platform always passes `context.auth` as the wrapped envelope `{"auth_type": ..., "credentials": {...}}`, and the SDK validates the inner `credentials` object against `config.auth.fields`. Use the wrapped envelope with a non-empty `auth_type` and put the field values under `credentials`:
 
 ```python
 # Example: Freshdesk (api_key + domain)

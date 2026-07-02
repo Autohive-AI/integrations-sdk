@@ -147,7 +147,7 @@ Required fields:
 - `fields`: a JSON Schema describing the **credentials object only** (the inner
   `credentials` the platform passes at runtime), with `properties` and an
   optional `required` list. `required` is allowed and recommended — as of SDK
-  3.0.0 it is enforced against the credentials object.
+  2.0.1 it is enforced against the credentials object.
 
 The `title` field labels the auth section in the UI.
 

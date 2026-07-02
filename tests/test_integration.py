@@ -594,7 +594,7 @@ async def test_connected_account_handler_abstract_get_account_info_returns_none(
     assert result is None
 
 
-# ── Strict wrapped-auth validation (SDK 3.0.0) ──────────────────────────────
+# ── Strict wrapped-auth validation (SDK 2.0.1) ──────────────────────────────
 
 
 def _no_required_auth_config():
@@ -675,7 +675,7 @@ async def test_execute_action_flat_auth_rejected(integration):
     assert result.type == ResultType.VALIDATION_ERROR
     assert result.result["source"] == "auth"
     assert "envelope" in result.result["message"]
-    assert "3.0.0" in result.result["message"]
+    assert "2.0.1" in result.result["message"]
 
 
 async def test_execute_action_missing_auth_type_rejected(integration):

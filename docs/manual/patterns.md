@@ -218,17 +218,19 @@ Define multiple properties in the `auth.fields` schema:
 
 ### Accessing Credentials
 
-Credentials are nested under `context.auth["credentials"]`:
+At runtime `context.auth` is the wrapped platform envelope
+(`{"auth_type": ..., "credentials": {...}}`). The `auth.fields` schema in
+`config.json` describes the inner credentials object only, and `auth.fields.required`
+is allowed and recommended. Read credentials via `context.credentials`, which
+unwraps `context.auth["credentials"]`:
 
 ```python
 def get_base_url(context: ExecutionContext) -> str:
-    credentials = context.auth.get("credentials", {})
-    domain = credentials.get("domain", "")
+    domain = context.credentials.get("domain", "")
     return f"https://{domain}.freshdesk.com/api/v2"
 
 def get_headers(context: ExecutionContext) -> Dict[str, str]:
-    credentials = context.auth.get("credentials", {})
-    api_key = credentials.get("api_key", "")
+    api_key = context.credentials.get("api_key", "")
     auth_bytes = f"{api_key}:X".encode("ascii")
     return {
         "Authorization": f"Basic {base64.b64encode(auth_bytes).decode('ascii')}",
@@ -261,15 +263,14 @@ async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> Ac
 
 ### Credentials
 
-Never hardcode API keys, tokens, or secrets. Always read them from `context.auth`:
+Never hardcode API keys, tokens, or secrets. Always read them from `context.credentials`:
 
 ```python
 # WRONG
 headers = {"Authorization": "Bearer sk-abc123"}
 
 # CORRECT
-credentials = context.auth.get("credentials", {})
-api_key = credentials.get("api_key", "")
+api_key = context.credentials.get("api_key", "")
 headers = {"Authorization": f"Bearer {api_key}"}
 ```
 

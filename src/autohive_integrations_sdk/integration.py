@@ -104,7 +104,7 @@ class ValidationError(Exception):
         self.message = message
         """The error message"""
         self.source = source
-        """Where the validation failed: 'input', 'output', or 'legacy' (pre-versioning default)"""
+        """Where the validation failed: 'input', 'output', 'auth', or 'legacy' (pre-versioning default)"""
         super().__init__(message)
 
 class ConfigurationError(Exception):
@@ -359,10 +359,14 @@ class ExecutionContext:
             result = await integration.execute_action("my_action", inputs, context)
 
     Args:
-        auth: Authentication data.  In **local tests** this is a flat dict
-            matching the ``auth.fields`` schema in ``config.json``
-            (e.g. ``{"api_key": "..."}``).  In **production** the platform
-            wraps credentials as ``{"auth_type": "...", "credentials": {...}}``.
+        auth: Authentication data.  This is always the platform auth envelope
+            ``{"auth_type": "...", "credentials": {...}}``.  The ``credentials``
+            object matches the ``auth.fields`` schema in ``config.json``.  Local
+            tests must use the same wrapped shape (e.g.
+            ``{"auth_type": "Custom", "credentials": {"api_key": "..."}}``); flat
+            auth is no longer supported as of SDK 3.0.0.  Handlers should read
+            individual credentials via ``context.credentials`` rather than
+            reaching into ``context.auth`` directly.
         request_config: Override default ``max_retries`` (3) and ``timeout`` (30 s).
         metadata: Arbitrary metadata forwarded to handlers.
         logger: Custom logger; falls back to ``logging.getLogger(__name__)``.
@@ -383,6 +387,20 @@ class ExecutionContext:
         self.logger = logger or logging.getLogger(__name__)
         """Logger instance"""
         self._session: Optional[aiohttp.ClientSession] = None
+
+    @property
+    def credentials(self) -> Dict[str, Any]:
+        """The integration's credentials, unwrapped from the auth envelope.
+
+        This is the blessed way for handlers to read credentials.  The platform
+        passes ``auth`` as the wrapped envelope
+        ``{"auth_type": "...", "credentials": {...}}``; this property returns the
+        inner ``credentials`` object (matching the ``auth.fields`` schema in
+        ``config.json``), or an empty dict when there is no auth.
+        """
+        if isinstance(self.auth, dict):
+            return self.auth.get("credentials", {})
+        return {}
 
     async def __aenter__(self):
         if not self._session:
@@ -743,6 +761,41 @@ class Integration:
             return handler_class
         return decorator
 
+    def _validate_auth(self, context: ExecutionContext) -> None:
+        """Validate the auth envelope's credentials against ``auth.fields``.
+
+        As of SDK 3.0.0 the platform always passes ``context.auth`` as the
+        wrapped envelope ``{"auth_type": ..., "credentials": {...}}``.  The
+        ``auth.fields`` schema in ``config.json`` describes only the inner
+        ``credentials`` object, so validation runs against
+        ``context.auth["credentials"]`` — not the whole envelope.
+
+        Integrations with no auth or no ``fields`` key skip validation entirely.
+
+        Raises:
+            ValidationError: (source ``"auth"``) if ``context.auth`` is not a
+                wrapped envelope, or if the credentials fail the schema.
+        """
+        if "fields" not in self.config.auth:
+            return
+
+        if not isinstance(context.auth, dict) or not isinstance(context.auth.get("credentials"), dict):
+            raise ValidationError(
+                'context.auth must be the platform auth envelope '
+                '{"auth_type": ..., "credentials": {...}}; flat auth is no '
+                'longer supported as of SDK 3.0.0.',
+                source="auth",
+            )
+
+        auth_config = self.config.auth["fields"]
+        validator = Draft7Validator(auth_config)
+        errors = sorted(validator.iter_errors(context.auth["credentials"]), key=lambda e: e.path)
+        if errors:
+            message = ""
+            for error in errors:
+                message += f"{list(error.schema_path)}, {error.message},\n "
+            raise ValidationError(message, auth_config, context.auth["credentials"], source="auth")
+
     async def execute_action(self,
                            name: str,
                            inputs: Dict[str, Any],
@@ -773,15 +826,7 @@ class Integration:
                     message += f"{list(error.schema_path)}, {error.message},\n "
                 raise ValidationError(message, action_config.input_schema, inputs, source="input")
 
-            if "fields" in self.config.auth:
-                auth_config = self.config.auth["fields"]
-                validator = Draft7Validator(auth_config)
-                errors = sorted(validator.iter_errors(context.auth), key=lambda e: e.path)
-                if errors:
-                    message = ""
-                    for error in errors:
-                        message += f"{list(error.schema_path)}, {error.message},\n "
-                    raise ValidationError(message, auth_config, context.auth, source="input")
+            self._validate_auth(context)
 
             # Create handler instance and execute
             handler = self._action_handlers[name]()
@@ -858,12 +903,8 @@ class Integration:
         except Exception as e:
             raise ValidationError(e.message, e.schema, e.instance)
 
-        try:
-            auth_config = self.config.auth["fields"]
-            validate(context.auth, auth_config)
-        except Exception as e:
-            raise ValidationError(e.message, e.schema, e.instance)
-        
+        self._validate_auth(context)
+
         # Create handler instance and execute
         handler = self._polling_handlers[name]()
         records = await handler.poll(inputs, last_poll_ts, context)
@@ -899,15 +940,7 @@ class Integration:
         if not self._connected_account_handler:
             raise ValidationError("No connected account handler registered")
 
-        if "fields" in self.config.auth:
-            auth_config = self.config.auth["fields"]
-            validator = Draft7Validator(auth_config)
-            errors = sorted(validator.iter_errors(context.auth), key=lambda e: e.path)
-            if errors:
-                message = ""
-                for error in errors:
-                    message += f"{list(error.schema_path)}, {error.message},\n "
-                raise ValidationError(message, auth_config, context.auth)
+        self._validate_auth(context)
 
         handler = self._connected_account_handler()
         account_info = await handler.get_account_info(context)

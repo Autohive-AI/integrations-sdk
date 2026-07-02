@@ -18,7 +18,7 @@ class MyAction(ActionHandler):
 
     async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
         example_input = inputs["example_input"]
-        api_key = context.auth.get("api_key", "")
+        api_key = context.credentials.get("api_key", "")
 
         response = await context.fetch(
             "https://api.example.com/endpoint",

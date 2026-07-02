@@ -82,8 +82,8 @@ def integration(tmp_config):
 
 @pytest.fixture
 def execution_context():
-    """A simple ExecutionContext with a Custom API key."""
+    """A simple ExecutionContext with a Custom API key in the platform envelope."""
     return ExecutionContext(
-        auth={"api_key": "test-key-123"},
+        auth={"auth_type": "Custom", "credentials": {"api_key": "test-key-123"}},
         request_config={"max_retries": 1, "timeout": 1},
     )

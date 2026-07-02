@@ -1,5 +1,56 @@
 # Release Notes
 
+## 3.0.0
+
+### Breaking Change
+
+Auth validation now expects the platform auth envelope only. Flat auth is no longer supported.
+
+The platform delivers integration auth as a wrapped envelope:
+
+```json
+{"auth_type": "Custom", "credentials": {"api_key": "...", "api_url": "..."}}
+```
+
+The `auth.fields` schema in `config.json` describes the inner `credentials`
+object. Previously the SDK validated the *entire* envelope against
+`auth.fields`, so any non-empty `required` list failed before the handler ran
+(the ActiveCampaign outage), while an empty `required` list passed vacuously
+even with empty credentials.
+
+As of 3.0.0 the SDK validates only `context.auth["credentials"]` against
+`auth.fields`. `auth.fields.required` is now honoured and recommended. If
+`context.auth` is not a wrapped envelope with a `credentials` dict, validation
+fails with a `VALIDATION_ERROR` whose `source` is `"auth"`.
+
+**Before (2.x local test):**
+```python
+ctx = ExecutionContext(auth={"api_key": "..."})  # flat
+```
+
+**After (3.0):**
+```python
+ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "..."}})
+```
+
+### Migration Guide
+
+1. **Wrap auth in local tests and any manual `ExecutionContext` construction**
+   in the `{"auth_type": ..., "credentials": {...}}` envelope. Production
+   traffic is already wrapped by the platform.
+2. **Read credentials via `context.credentials`** — the blessed accessor that
+   unwraps `context.auth["credentials"]`:
+   ```python
+   # Before
+   api_key = context.auth.get("api_key", "")
+   # After
+   api_key = context.credentials.get("api_key", "")
+   ```
+3. **Keep `auth.fields.required`** — it is now enforced against the credentials
+   object and is the recommended way to require credentials.
+4. **Pin the SDK with `~=`** so each integration opts in to 3.0.0 explicitly;
+   there is no flat-auth backward compatibility.
+
 ## 2.0.0
 
 ### ⚠️ Breaking Change

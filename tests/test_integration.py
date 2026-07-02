@@ -76,7 +76,7 @@ async def test_execute_action_success(integration):
         async def execute(self, inputs, context):
             return ActionResult(data={"greeting": f"Hello {inputs['name']}"})
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     result = await integration.execute_action("test_action", {"name": "World"}, ctx)
 
     assert result.type == ResultType.ACTION
@@ -90,7 +90,7 @@ async def test_execute_action_with_cost(integration):
         async def execute(self, inputs, context):
             return ActionResult(data={"greeting": "hi"}, cost_usd=0.05)
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     result = await integration.execute_action("test_action", {"name": "x"}, ctx)
 
     assert result.type == ResultType.ACTION
@@ -103,7 +103,7 @@ async def test_execute_action_invalid_inputs(integration):
         async def execute(self, inputs, context):
             return ActionResult(data={"greeting": "hi"})
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     result = await integration.execute_action("test_action", {}, ctx)
 
     assert result.type == ResultType.VALIDATION_ERROR
@@ -115,7 +115,7 @@ async def test_execute_action_invalid_output(integration):
         async def execute(self, inputs, context):
             return ActionResult(data={"wrong_key": 123})
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     result = await integration.execute_action("test_action", {"name": "x"}, ctx)
 
     assert result.type == ResultType.VALIDATION_ERROR
@@ -127,14 +127,14 @@ async def test_execute_action_wrong_return_type(integration):
         async def execute(self, inputs, context):
             return {"greeting": "plain dict"}
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     result = await integration.execute_action("test_action", {"name": "x"}, ctx)
 
     assert result.type == ResultType.VALIDATION_ERROR
 
 
 async def test_execute_action_not_registered(integration):
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     result = await integration.execute_action("test_action", {"name": "x"}, ctx)
 
     assert result.type == ResultType.VALIDATION_ERROR
@@ -146,7 +146,7 @@ async def test_execute_action_error(integration):
         async def execute(self, inputs, context):
             return ActionError(message="something went wrong", cost_usd=0.01)
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     result = await integration.execute_action("test_action", {"name": "x"}, ctx)
 
     assert result.type == ResultType.ACTION_ERROR
@@ -172,7 +172,7 @@ async def test_execute_polling_trigger_success(integration):
         async def poll(self, inputs, last_poll_ts, context):
             return [{"id": "1", "data": {"message": "hello"}}]
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     records = await integration.execute_polling_trigger(
         "test_trigger", {"channel": "general"}, None, ctx
     )
@@ -188,7 +188,7 @@ async def test_execute_polling_trigger_missing_id(integration):
         async def poll(self, inputs, last_poll_ts, context):
             return [{"data": {"message": "no id"}}]
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     with pytest.raises(ValidationError, match="id"):
         await integration.execute_polling_trigger(
             "test_trigger", {"channel": "general"}, None, ctx
@@ -213,7 +213,7 @@ async def test_get_connected_account_success(integration):
         async def get_account_info(self, context):
             return ConnectedAccountInfo(email="a@b.com", first_name="Alice")
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     result = await integration.get_connected_account(ctx)
 
     assert result.type == ResultType.CONNECTED_ACCOUNT
@@ -227,7 +227,7 @@ async def test_get_connected_account_wrong_type(integration):
         async def get_account_info(self, context):
             return {"email": "raw dict"}
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     with pytest.raises(ValidationError, match="ConnectedAccountInfo"):
         await integration.get_connected_account(ctx)
 
@@ -251,17 +251,19 @@ def test_parse_interval_invalid():
 
 
 async def test_execute_action_auth_validation_failure(integration):
-    """Invalid auth credentials (missing required api_key) → VALIDATION_ERROR."""
+    """Wrapped auth missing a required credential → VALIDATION_ERROR (source 'auth')."""
 
     @integration.action("test_action")
     class Handler(ActionHandler):
         async def execute(self, inputs, context):
             return ActionResult(data={"greeting": "hi"})
 
-    ctx = ExecutionContext(auth={})  # missing required api_key
+    # Wrapped envelope, but credentials are missing the required api_key.
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {}})
     result = await integration.execute_action("test_action", {"name": "x"}, ctx)
 
     assert result.type == ResultType.VALIDATION_ERROR
+    assert result.result["source"] == "auth"
 
 
 async def test_execute_action_no_auth_fields_in_config(tmp_path):
@@ -306,7 +308,7 @@ async def test_execute_action_no_auth_fields_in_config(tmp_path):
 
 
 async def test_execute_polling_trigger_not_registered(integration):
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     with pytest.raises(ValidationError, match="not registered"):
         await integration.execute_polling_trigger(
             "test_trigger", {"channel": "general"}, None, ctx
@@ -321,7 +323,7 @@ async def test_execute_polling_trigger_missing_data(integration):
         async def poll(self, inputs, last_poll_ts, context):
             return [{"id": "1"}]  # missing 'data'
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     with pytest.raises(ValidationError, match="data"):
         await integration.execute_polling_trigger(
             "test_trigger", {"channel": "general"}, None, ctx
@@ -336,7 +338,7 @@ async def test_execute_polling_trigger_output_schema_mismatch(integration):
         async def poll(self, inputs, last_poll_ts, context):
             return [{"id": "1", "data": {"wrong_field": 123}}]
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     with pytest.raises(ValidationError):
         await integration.execute_polling_trigger(
             "test_trigger", {"channel": "general"}, None, ctx
@@ -353,7 +355,7 @@ async def test_execute_polling_trigger_multiple_records(integration):
                 {"id": "3", "data": {"message": "third"}},
             ]
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     records = await integration.execute_polling_trigger(
         "test_trigger", {"channel": "general"}, None, ctx
     )
@@ -366,7 +368,7 @@ async def test_execute_polling_trigger_multiple_records(integration):
 
 
 async def test_get_connected_account_no_handler(integration):
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     with pytest.raises(ValidationError, match="No connected account handler"):
         await integration.get_connected_account(ctx)
 
@@ -377,9 +379,11 @@ async def test_get_connected_account_auth_validation_failure(integration):
         async def get_account_info(self, context):
             return ConnectedAccountInfo(email="a@b.com")
 
-    ctx = ExecutionContext(auth={})  # missing required api_key
-    with pytest.raises(ValidationError):
+    # Wrapped envelope, but credentials are missing the required api_key.
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {}})
+    with pytest.raises(ValidationError) as exc_info:
         await integration.get_connected_account(ctx)
+    assert exc_info.value.source == "auth"
 
 
 async def test_get_connected_account_no_auth_fields(tmp_path):
@@ -514,7 +518,7 @@ async def test_execute_polling_trigger_invalid_inputs(integration):
         async def poll(self, inputs, last_poll_ts, context):
             return []
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     with pytest.raises(ValidationError):
         await integration.execute_polling_trigger(
             "test_trigger", {}, None, ctx  # missing required 'channel'
@@ -522,18 +526,20 @@ async def test_execute_polling_trigger_invalid_inputs(integration):
 
 
 async def test_execute_polling_trigger_auth_failure(integration):
-    """Invalid auth credentials for polling trigger → ValidationError."""
+    """Wrapped auth missing a required credential for polling trigger → ValidationError."""
 
     @integration.polling_trigger("test_trigger")
     class Handler(PollingTriggerHandler):
         async def poll(self, inputs, last_poll_ts, context):
             return []
 
-    ctx = ExecutionContext(auth={})  # missing required api_key
-    with pytest.raises(ValidationError):
+    # Wrapped envelope, but credentials are missing the required api_key.
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {}})
+    with pytest.raises(ValidationError) as exc_info:
         await integration.execute_polling_trigger(
             "test_trigger", {"channel": "general"}, None, ctx
         )
+    assert exc_info.value.source == "auth"
 
 
 def test_re_register_handler_overwrites(integration):
@@ -586,3 +592,233 @@ async def test_connected_account_handler_abstract_get_account_info_returns_none(
 
     result = await Concrete().get_account_info(None)
     assert result is None
+
+
+# ── Strict wrapped-auth validation (SDK 3.0.0) ──────────────────────────────
+
+
+def _no_required_auth_config():
+    """Config whose auth.fields has properties but no required list."""
+    return {
+        "name": "no-required-auth",
+        "version": "1.0.0",
+        "description": "Auth fields without a required list",
+        "auth": {
+            "auth_type": "Custom",
+            "fields": {
+                "type": "object",
+                "properties": {"api_key": {"type": "string"}},
+            },
+        },
+        "actions": {
+            "test_action": {
+                "description": "A simple test action",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string"}},
+                    "required": ["name"],
+                },
+                "output_schema": {
+                    "type": "object",
+                    "properties": {"greeting": {"type": "string"}},
+                    "required": ["greeting"],
+                },
+            }
+        },
+        "polling_triggers": {
+            "test_trigger": {
+                "description": "A simple test trigger",
+                "polling_interval": "5m",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"channel": {"type": "string"}},
+                    "required": ["channel"],
+                },
+                "output_schema": {
+                    "type": "object",
+                    "properties": {"message": {"type": "string"}},
+                    "required": ["message"],
+                },
+            }
+        },
+    }
+
+
+async def test_execute_action_wrapped_auth_success(integration):
+    """Wrapped auth with a non-empty required credential passes and runs the action."""
+
+    @integration.action("test_action")
+    class Handler(ActionHandler):
+        async def execute(self, inputs, context):
+            return ActionResult(data={"greeting": f"Hello {inputs['name']}"})
+
+    ctx = ExecutionContext(
+        auth={"auth_type": "Custom", "credentials": {"api_key": "k"}}
+    )
+    result = await integration.execute_action("test_action", {"name": "World"}, ctx)
+
+    assert result.type == ResultType.ACTION
+    assert result.result.data == {"greeting": "Hello World"}
+
+
+async def test_execute_action_flat_auth_rejected(integration):
+    """Flat auth (no credentials key) fails with the explicit envelope error."""
+
+    @integration.action("test_action")
+    class Handler(ActionHandler):
+        async def execute(self, inputs, context):
+            return ActionResult(data={"greeting": "hi"})
+
+    ctx = ExecutionContext(auth={"api_key": "k"})  # flat, no envelope
+    result = await integration.execute_action("test_action", {"name": "x"}, ctx)
+
+    assert result.type == ResultType.VALIDATION_ERROR
+    assert result.result["source"] == "auth"
+    assert "envelope" in result.result["message"]
+    assert "3.0.0" in result.result["message"]
+
+
+async def test_execute_action_empty_credentials_no_required_passes(tmp_path):
+    """Empty credentials pass when auth.fields has no required list."""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps(_no_required_auth_config()))
+    intg = Integration.load(config_file)
+
+    @intg.action("test_action")
+    class Handler(ActionHandler):
+        async def execute(self, inputs, context):
+            return ActionResult(data={"greeting": "hi"})
+
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {}})
+    result = await intg.execute_action("test_action", {"name": "x"}, ctx)
+
+    assert result.type == ResultType.ACTION
+
+
+async def test_execute_polling_trigger_wrapped_auth_success(integration):
+    """Wrapped auth with a required credential passes for polling triggers."""
+
+    @integration.polling_trigger("test_trigger")
+    class Handler(PollingTriggerHandler):
+        async def poll(self, inputs, last_poll_ts, context):
+            return [{"id": "1", "data": {"message": "hello"}}]
+
+    ctx = ExecutionContext(
+        auth={"auth_type": "Custom", "credentials": {"api_key": "k"}}
+    )
+    records = await integration.execute_polling_trigger(
+        "test_trigger", {"channel": "general"}, None, ctx
+    )
+
+    assert len(records) == 1
+    assert records[0]["id"] == "1"
+
+
+async def test_execute_polling_trigger_flat_auth_rejected(integration):
+    """Flat auth is rejected for polling triggers with the explicit envelope error."""
+
+    @integration.polling_trigger("test_trigger")
+    class Handler(PollingTriggerHandler):
+        async def poll(self, inputs, last_poll_ts, context):
+            return []
+
+    ctx = ExecutionContext(auth={"api_key": "k"})  # flat, no envelope
+    with pytest.raises(ValidationError) as exc_info:
+        await integration.execute_polling_trigger(
+            "test_trigger", {"channel": "general"}, None, ctx
+        )
+    assert exc_info.value.source == "auth"
+    assert "envelope" in exc_info.value.message
+
+
+async def test_execute_polling_trigger_empty_credentials_no_required_passes(tmp_path):
+    """Empty credentials pass for polling triggers when auth.fields has no required."""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps(_no_required_auth_config()))
+    intg = Integration.load(config_file)
+
+    @intg.polling_trigger("test_trigger")
+    class Handler(PollingTriggerHandler):
+        async def poll(self, inputs, last_poll_ts, context):
+            return [{"id": "1", "data": {"message": "hello"}}]
+
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {}})
+    records = await intg.execute_polling_trigger(
+        "test_trigger", {"channel": "general"}, None, ctx
+    )
+
+    assert len(records) == 1
+
+
+async def test_get_connected_account_wrapped_auth_success(integration):
+    """Wrapped auth with a required credential passes for connected accounts."""
+
+    @integration.connected_account()
+    class Handler(ConnectedAccountHandler):
+        async def get_account_info(self, context):
+            return ConnectedAccountInfo(email="a@b.com")
+
+    ctx = ExecutionContext(
+        auth={"auth_type": "Custom", "credentials": {"api_key": "k"}}
+    )
+    result = await integration.get_connected_account(ctx)
+
+    assert result.type == ResultType.CONNECTED_ACCOUNT
+    assert result.result.email == "a@b.com"
+
+
+async def test_get_connected_account_flat_auth_rejected(integration):
+    """Flat auth is rejected for connected accounts with the explicit envelope error."""
+
+    @integration.connected_account()
+    class Handler(ConnectedAccountHandler):
+        async def get_account_info(self, context):
+            return ConnectedAccountInfo(email="a@b.com")
+
+    ctx = ExecutionContext(auth={"api_key": "k"})  # flat, no envelope
+    with pytest.raises(ValidationError) as exc_info:
+        await integration.get_connected_account(ctx)
+    assert exc_info.value.source == "auth"
+    assert "envelope" in exc_info.value.message
+
+
+async def test_get_connected_account_empty_credentials_no_required_passes(tmp_path):
+    """Empty credentials pass for connected accounts when auth.fields has no required."""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps(_no_required_auth_config()))
+    intg = Integration.load(config_file)
+
+    @intg.connected_account()
+    class Handler(ConnectedAccountHandler):
+        async def get_account_info(self, context):
+            return ConnectedAccountInfo(email="a@b.com")
+
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {}})
+    result = await intg.get_connected_account(ctx)
+
+    assert result.type == ResultType.CONNECTED_ACCOUNT
+
+
+# ── ExecutionContext.credentials property ───────────────────────────────────
+
+
+def test_execution_context_credentials_unwraps_envelope():
+    ctx = ExecutionContext(
+        auth={"auth_type": "Custom", "credentials": {"api_key": "k", "api_url": "u"}}
+    )
+    assert ctx.credentials == {"api_key": "k", "api_url": "u"}
+
+
+def test_execution_context_credentials_empty_when_no_auth():
+    ctx = ExecutionContext()
+    assert ctx.credentials == {}
+
+
+def test_execution_context_credentials_empty_when_no_credentials_key():
+    ctx = ExecutionContext(auth={"auth_type": "Custom"})
+    assert ctx.credentials == {}
+
+
+def test_execution_context_credentials_empty_when_auth_not_dict():
+    ctx = ExecutionContext(auth=None)
+    assert ctx.credentials == {}

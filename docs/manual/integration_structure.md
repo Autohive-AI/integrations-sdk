@@ -144,7 +144,10 @@ For integrations where users provide their own credentials:
 
 Required fields:
 - `type`: must be `"custom"`
-- `fields`: JSON Schema object with `properties`
+- `fields`: a JSON Schema describing the **credentials object only** (the inner
+  `credentials` the platform passes at runtime), with `properties` and an
+  optional `required` list. `required` is allowed and recommended — as of SDK
+  3.0.0 it is enforced against the credentials object.
 
 The `title` field labels the auth section in the UI.
 
@@ -158,7 +161,10 @@ Each property in `fields.properties` supports:
 | `help_text` | string | Help text shown below the field |
 | `default` | any | Default value |
 
-At runtime, credentials are nested under `context.auth["credentials"]`: `context.auth.get("credentials", {}).get("api_token")`.
+At runtime `context.auth` is the wrapped platform envelope
+(`{"auth_type": ..., "credentials": {...}}`). Handlers should read individual
+credentials via `context.credentials` (which unwraps
+`context.auth["credentials"]`): `context.credentials.get("api_token")`.
 
 #### Platform Auth (OAuth2)
 

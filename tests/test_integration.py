@@ -678,6 +678,70 @@ async def test_execute_action_flat_auth_rejected(integration):
     assert "3.0.0" in result.result["message"]
 
 
+async def test_execute_action_missing_auth_type_rejected(integration):
+    """Envelope without auth_type is rejected with the explicit envelope error."""
+
+    @integration.action("test_action")
+    class Handler(ActionHandler):
+        async def execute(self, inputs, context):
+            return ActionResult(data={"greeting": "hi"})
+
+    # Has credentials but no auth_type — the undocumented third shape.
+    ctx = ExecutionContext(auth={"credentials": {"api_key": "k"}})
+    result = await integration.execute_action("test_action", {"name": "x"}, ctx)
+
+    assert result.type == ResultType.VALIDATION_ERROR
+    assert result.result["source"] == "auth"
+    assert "auth_type" in result.result["message"]
+
+
+async def test_execute_action_empty_auth_type_rejected(integration):
+    """Envelope with an empty-string auth_type is rejected."""
+
+    @integration.action("test_action")
+    class Handler(ActionHandler):
+        async def execute(self, inputs, context):
+            return ActionResult(data={"greeting": "hi"})
+
+    ctx = ExecutionContext(auth={"auth_type": "", "credentials": {"api_key": "k"}})
+    result = await integration.execute_action("test_action", {"name": "x"}, ctx)
+
+    assert result.type == ResultType.VALIDATION_ERROR
+    assert result.result["source"] == "auth"
+
+
+async def test_execute_polling_trigger_missing_auth_type_rejected(integration):
+    """Envelope without auth_type is rejected for polling triggers via the shared helper."""
+
+    @integration.polling_trigger("test_trigger")
+    class Handler(PollingTriggerHandler):
+        async def poll(self, inputs, last_poll_ts, context):
+            return []
+
+    ctx = ExecutionContext(auth={"credentials": {"api_key": "k"}})
+    with pytest.raises(ValidationError) as exc_info:
+        await integration.execute_polling_trigger(
+            "test_trigger", {"channel": "general"}, None, ctx
+        )
+    assert exc_info.value.source == "auth"
+    assert "auth_type" in exc_info.value.message
+
+
+async def test_get_connected_account_missing_auth_type_rejected(integration):
+    """Envelope without auth_type is rejected for connected accounts via the shared helper."""
+
+    @integration.connected_account()
+    class Handler(ConnectedAccountHandler):
+        async def get_account_info(self, context):
+            return ConnectedAccountInfo(email="a@b.com")
+
+    ctx = ExecutionContext(auth={"credentials": {"api_key": "k"}})
+    with pytest.raises(ValidationError) as exc_info:
+        await integration.get_connected_account(ctx)
+    assert exc_info.value.source == "auth"
+    assert "auth_type" in exc_info.value.message
+
+
 async def test_execute_action_empty_credentials_no_required_passes(tmp_path):
     """Empty credentials pass when auth.fields has no required list."""
     config_file = tmp_path / "config.json"

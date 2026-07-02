@@ -774,16 +774,25 @@ class Integration:
 
         Raises:
             ValidationError: (source ``"auth"``) if ``context.auth`` is not a
-                wrapped envelope, or if the credentials fail the schema.
+                wrapped envelope (a dict with a non-empty string ``auth_type``
+                and a dict ``credentials``), or if the credentials fail the
+                schema.
         """
         if "fields" not in self.config.auth:
             return
 
-        if not isinstance(context.auth, dict) or not isinstance(context.auth.get("credentials"), dict):
+        auth = context.auth
+        has_valid_credentials = isinstance(auth, dict) and isinstance(auth.get("credentials"), dict)
+        has_valid_auth_type = (
+            isinstance(auth, dict)
+            and isinstance(auth.get("auth_type"), str)
+            and auth.get("auth_type") != ""
+        )
+        if not has_valid_credentials or not has_valid_auth_type:
             raise ValidationError(
                 'context.auth must be the platform auth envelope '
-                '{"auth_type": ..., "credentials": {...}}; flat auth is no '
-                'longer supported as of SDK 3.0.0.',
+                '{"auth_type": ..., "credentials": {...}} with a non-empty '
+                'auth_type; flat auth is no longer supported as of SDK 3.0.0.',
                 source="auth",
             )
 

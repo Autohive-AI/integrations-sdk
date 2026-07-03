@@ -861,28 +861,3 @@ async def test_get_connected_account_empty_credentials_no_required_passes(tmp_pa
     result = await intg.get_connected_account(ctx)
 
     assert result.type == ResultType.CONNECTED_ACCOUNT
-
-
-# ── ExecutionContext.credentials property ───────────────────────────────────
-
-
-def test_execution_context_credentials_unwraps_envelope():
-    ctx = ExecutionContext(
-        auth={"auth_type": "Custom", "credentials": {"api_key": "k", "api_url": "u"}}
-    )
-    assert ctx.credentials == {"api_key": "k", "api_url": "u"}
-
-
-def test_execution_context_credentials_empty_when_no_auth():
-    ctx = ExecutionContext()
-    assert ctx.credentials == {}
-
-
-def test_execution_context_credentials_empty_when_no_credentials_key():
-    ctx = ExecutionContext(auth={"auth_type": "Custom"})
-    assert ctx.credentials == {}
-
-
-def test_execution_context_credentials_empty_when_auth_not_dict():
-    ctx = ExecutionContext(auth=None)
-    assert ctx.credentials == {}

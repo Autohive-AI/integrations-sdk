@@ -168,7 +168,7 @@ ctx.auth = {
 }
 ```
 
-Handlers read individual credentials via `context.credentials` (for example `context.credentials.get("api_key")`), which unwraps the `credentials` object for you.
+Handlers read individual credentials directly from the envelope via `context.auth["credentials"]` (for example `context.auth["credentials"].get("api_key")`).
 
 Using the wrong shape — flat auth, or an envelope missing `auth_type` — will cause `ResultType.VALIDATION_ERROR` (with `source="auth"`) before the action handler runs, making tests false negatives.
 

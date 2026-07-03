@@ -163,8 +163,8 @@ Each property in `fields.properties` supports:
 
 At runtime `context.auth` is the wrapped platform envelope
 (`{"auth_type": ..., "credentials": {...}}`). Handlers should read individual
-credentials via `context.credentials` (which unwraps
-`context.auth["credentials"]`): `context.credentials.get("api_token")`.
+credentials directly from the envelope via
+`context.auth["credentials"]`: `context.auth["credentials"].get("api_token")`.
 
 #### Platform Auth (OAuth2)
 

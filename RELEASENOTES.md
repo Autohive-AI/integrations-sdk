@@ -42,13 +42,13 @@ ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "
 1. **Wrap auth in local tests and any manual `ExecutionContext` construction**
    in the `{"auth_type": ..., "credentials": {...}}` envelope. Production
    traffic is already wrapped by the platform.
-2. **Read credentials via `context.credentials`** — the blessed accessor that
-   unwraps `context.auth["credentials"]`:
+2. **Read credentials directly from the envelope** via
+   `context.auth["credentials"]`:
    ```python
    # Before
    api_key = context.auth.get("api_key", "")
    # After
-   api_key = context.credentials.get("api_key", "")
+   api_key = context.auth["credentials"].get("api_key", "")
    ```
 3. **Keep `auth.fields.required`** — it is now enforced against the credentials
    object and is the recommended way to require credentials.

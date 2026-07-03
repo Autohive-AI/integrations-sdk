@@ -365,8 +365,9 @@ class ExecutionContext:
             tests must use the same wrapped shape (e.g.
             ``{"auth_type": "Custom", "credentials": {"api_key": "..."}}``); flat
             auth is no longer supported as of SDK 2.0.1.  Handlers should read
-            individual credentials via ``context.credentials`` rather than
-            reaching into ``context.auth`` directly.
+            individual credentials via ``context.auth["credentials"]`` (for
+            example ``context.auth["credentials"].get("api_key", "")``); strict
+            validation guarantees this shape exists before a handler runs.
         request_config: Override default ``max_retries`` (3) and ``timeout`` (30 s).
         metadata: Arbitrary metadata forwarded to handlers.
         logger: Custom logger; falls back to ``logging.getLogger(__name__)``.
@@ -387,20 +388,6 @@ class ExecutionContext:
         self.logger = logger or logging.getLogger(__name__)
         """Logger instance"""
         self._session: Optional[aiohttp.ClientSession] = None
-
-    @property
-    def credentials(self) -> Dict[str, Any]:
-        """The integration's credentials, unwrapped from the auth envelope.
-
-        This is the blessed way for handlers to read credentials.  The platform
-        passes ``auth`` as the wrapped envelope
-        ``{"auth_type": "...", "credentials": {...}}``; this property returns the
-        inner ``credentials`` object (matching the ``auth.fields`` schema in
-        ``config.json``), or an empty dict when there is no auth.
-        """
-        if isinstance(self.auth, dict):
-            return self.auth.get("credentials", {})
-        return {}
 
     async def __aenter__(self):
         if not self._session:

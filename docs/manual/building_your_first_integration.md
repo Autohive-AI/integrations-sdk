@@ -431,7 +431,7 @@ async with ExecutionContext(auth=auth) as context:
     result = await my_integration.execute_action("get_items", inputs, context)
 ```
 
-> **Note:** As of SDK 2.0.1 the platform always passes `context.auth` as the wrapped envelope `{"auth_type": "...", "credentials": {"api_token": "..."}}`, and the SDK validates it as such — flat auth is rejected with a `source="auth"` validation error. Handlers should read individual credentials via `context.credentials` (for example `context.credentials.get("api_token")`) rather than reaching into `context.auth` directly. Local tests must use the same wrapped shape.
+> **Note:** As of SDK 2.0.1 the platform always passes `context.auth` as the wrapped envelope `{"auth_type": "...", "credentials": {"api_token": "..."}}`, and the SDK validates it as such — flat auth is rejected with a `source="auth"` validation error. Handlers should read individual credentials directly from the envelope via `context.auth["credentials"]` (for example `context.auth["credentials"].get("api_token")`). Local tests must use the same wrapped shape.
 
 For **platform OAuth** integrations (where `context.fetch()` auto-injects the Bearer token), pass the full wrapped structure in tests:
 

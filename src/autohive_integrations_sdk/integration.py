@@ -364,7 +364,7 @@ class ExecutionContext:
             object matches the ``auth.fields`` schema in ``config.json``.  Local
             tests must use the same wrapped shape (e.g.
             ``{"auth_type": "Custom", "credentials": {"api_key": "..."}}``); flat
-            auth is no longer supported as of SDK 2.0.1.  Handlers should read
+            auth is not supported.  Handlers should read
             individual credentials via ``context.auth["credentials"]`` (for
             example ``context.auth["credentials"].get("api_key", "")``); strict
             validation guarantees this shape exists before a handler runs.
@@ -751,7 +751,7 @@ class Integration:
     def _validate_auth(self, context: ExecutionContext) -> None:
         """Validate the auth envelope's credentials against ``auth.fields``.
 
-        As of SDK 2.0.1 the platform always passes ``context.auth`` as the
+        The platform always passes ``context.auth`` as the
         wrapped envelope ``{"auth_type": ..., "credentials": {...}}``.  The
         ``auth.fields`` schema in ``config.json`` describes only the inner
         ``credentials`` object, so validation runs against
@@ -779,7 +779,7 @@ class Integration:
             raise ValidationError(
                 'context.auth must be the platform auth envelope '
                 '{"auth_type": ..., "credentials": {...}} with a non-empty '
-                'auth_type; flat auth is no longer supported as of SDK 2.0.1.',
+                'auth_type; flat auth is not supported.',
                 source="auth",
             )
 

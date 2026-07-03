@@ -29,7 +29,7 @@ class FetchData(ActionHandler):
     async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
         response = await context.fetch(
             "https://api.example.com/data",
-            headers={"Authorization": f"Bearer {context.auth['api_key']}"}
+            headers={"Authorization": f"Bearer {context.auth['credentials']['api_key']}"}
         )
         return ActionResult(data=response.data)
 ```

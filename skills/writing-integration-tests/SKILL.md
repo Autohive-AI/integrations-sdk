@@ -101,7 +101,7 @@ def live_context(env_credentials, make_context):
     api_key = env_credentials("MYINTEGRATION_API_KEY")
     if not api_key:
         pytest.skip("MYINTEGRATION_API_KEY not set — skipping integration tests")
-    return make_context(auth={"credentials": {"api_key": api_key}})
+    return make_context(auth={"auth_type": "Custom", "credentials": {"api_key": api_key}})
 ```
 
 This is the recommended pattern for any test that needs API credentials: it skips automatically when the env var is missing, integrates with the project `.env`, and avoids per-test boilerplate.
@@ -264,7 +264,7 @@ def live_context(env_credentials, make_context):
     api_key = env_credentials("MYINTEGRATION_API_KEY")
     if not api_key:
         pytest.skip("MYINTEGRATION_API_KEY not set — skipping integration tests")
-    return make_context(auth={"credentials": {"api_key": api_key}})
+    return make_context(auth={"auth_type": "Custom", "credentials": {"api_key": api_key}})
 ```
 
 This variant is the simplest of the four — no `real_fetch` definition needed. Use it whenever the integration's source imports a vendor SDK and calls it directly rather than calling `context.fetch`.

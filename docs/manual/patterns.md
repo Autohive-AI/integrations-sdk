@@ -218,7 +218,11 @@ Define multiple properties in the `auth.fields` schema:
 
 ### Accessing Credentials
 
-Credentials are nested under `context.auth["credentials"]`:
+At runtime `context.auth` is the wrapped platform envelope
+(`{"auth_type": ..., "credentials": {...}}`). The `auth.fields` schema in
+`config.json` describes the inner credentials object only, and `auth.fields.required`
+is allowed and recommended. Read credentials directly from the envelope via
+`context.auth["credentials"]`:
 
 ```python
 def get_base_url(context: ExecutionContext) -> str:

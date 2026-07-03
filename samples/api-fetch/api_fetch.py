@@ -34,8 +34,8 @@ class APIFetchActionBasicAuth(ActionHandler):
 
     async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
         url = inputs["url"]
-        username = context.auth.get("user_name", "")
-        password = context.auth.get("password", "")
+        username = context.auth["credentials"].get("user_name", "")
+        password = context.auth["credentials"].get("password", "")
 
         # Inject credentials into the URL for Basic Auth
         if url.startswith("https://"):
@@ -57,7 +57,7 @@ class APIFetchActionHeader(ActionHandler):
 
     async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
         url = inputs["url"]
-        api_key = context.auth.get("api_key", "")
+        api_key = context.auth["credentials"].get("api_key", "")
 
         response = await context.fetch(
             url,

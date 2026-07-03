@@ -65,7 +65,7 @@ def mock_context():
     """Mock ExecutionContext pre-loaded with this integration's credentials."""
     ctx = MagicMock(name="ExecutionContext")
     ctx.fetch = AsyncMock(name="fetch")
-    ctx.auth = {"credentials": {"api_key": "test_api_key"}}  # nosec B105
+    ctx.auth = {"auth_type": "Custom", "credentials": {"api_key": "test_api_key"}}  # nosec B105
     return ctx
 ```
 
@@ -132,7 +132,7 @@ For one-off credential shapes inside a single test, use `make_context`:
 
 ```python
 async def test_with_custom_auth(make_context):
-    ctx = make_context(auth={"credentials": {"api_key": "different_key"}})  # nosec B105
+    ctx = make_context(auth={"auth_type": "Custom", "credentials": {"api_key": "different_key"}})  # nosec B105
     ...
 ```
 
@@ -145,24 +145,32 @@ ctx.auth = {
 }
 ```
 
-**Custom auth** (`config.auth.type == "custom"`): The SDK validates `context.auth` directly against `config.auth.fields`. Use a flat object matching the field schema:
+**Custom auth** (`config.auth.type == "custom"`): The platform always passes `context.auth` as the wrapped envelope `{"auth_type": ..., "credentials": {...}}`, and the SDK validates the inner `credentials` object against `config.auth.fields`. Use the wrapped envelope with a non-empty `auth_type` and put the field values under `credentials`:
 
 ```python
 # Example: Freshdesk (api_key + domain)
 ctx.auth = {
-    "api_key": "test_api_key",  # nosec B105
-    "domain": "testcompany",
+    "auth_type": "Custom",
+    "credentials": {
+        "api_key": "test_api_key",  # nosec B105
+        "domain": "testcompany",
+    },
 }
 
 # Example: Ghost (api_url + content_api_key + admin_api_key)
 ctx.auth = {
-    "api_url": "https://test.ghost.io",
-    "content_api_key": "test_content_key",  # nosec B105
-    "admin_api_key": "test_admin_key",  # nosec B105
+    "auth_type": "Custom",
+    "credentials": {
+        "api_url": "https://test.ghost.io",
+        "content_api_key": "test_content_key",  # nosec B105
+        "admin_api_key": "test_admin_key",  # nosec B105
+    },
 }
 ```
 
-Using the wrong shape will cause `ResultType.VALIDATION_ERROR` before the action handler runs, making tests false negatives.
+Handlers read individual credentials directly from the envelope via `context.auth["credentials"]` (for example `context.auth["credentials"].get("api_key")`).
+
+Using the wrong shape — flat auth, or an envelope missing `auth_type` — will cause `ResultType.VALIDATION_ERROR` (with `source="auth"`) before the action handler runs, making tests false negatives.
 
 ## Test Categories
 

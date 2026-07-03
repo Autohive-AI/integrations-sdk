@@ -437,17 +437,18 @@ if __name__ == "__main__":
     asyncio.run(test_get_items())
 ```
 
-For integrations that require authentication, pass credentials matching your `auth.fields` schema:
+For integrations that require authentication, pass the wrapped auth envelope. The `credentials` object must match your `auth.fields` schema, and `auth_type` must be present:
 
 ```python
 auth = {
-    "api_token": "your-test-token"
+    "auth_type": "Custom",
+    "credentials": {"api_token": "your-test-token"}
 }
 async with ExecutionContext(auth=auth) as context:
     result = await my_integration.execute_action("get_items", inputs, context)
 ```
 
-> **Note:** In production, the platform wraps credentials as `{"auth_type": "...", "credentials": {"api_token": "..."}}`. That's why production action handlers access `context.auth.get("credentials", {}).get("api_token")`. When testing locally with `execute_action`, the SDK validates `context.auth` directly against your `auth.fields` schema, so pass credentials flat.
+> **Note:** The platform always passes `context.auth` as the wrapped envelope `{"auth_type": "...", "credentials": {"api_token": "..."}}`, and the SDK validates it as such — flat auth is rejected with a `source="auth"` validation error. Handlers should read individual credentials directly from the envelope via `context.auth["credentials"]` (for example `context.auth["credentials"].get("api_token")`). Local tests must use the same wrapped shape.
 
 For **platform OAuth** integrations (where `context.fetch()` auto-injects the Bearer token), pass the full wrapped structure in tests:
 

@@ -6,10 +6,14 @@ from autohive_integrations_sdk import ExecutionContext
 
 async def test_my_action():
     """Test the my_action action."""
-    # Auth fields are passed flat (matching config.json fields schema).
-    # In production, the platform wraps these under {"auth_type": "...", "credentials": {...}}.
+    # Auth is the platform envelope. The credentials object matches the
+    # config.json fields schema. This is the same shape the platform sends
+    # in production.
     auth = {
-        "api_key": "test_api_key"
+        "auth_type": "Custom",
+        "credentials": {
+            "api_key": "test_api_key"
+        }
     }
 
     inputs = {

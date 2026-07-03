@@ -783,6 +783,14 @@ class Integration:
                 source="auth",
             )
 
+        valid_auth_types = {member.value for member in AuthType}
+        if auth["auth_type"] not in valid_auth_types:
+            raise ValidationError(
+                f'Unknown auth_type "{auth["auth_type"]}" in context.auth; '
+                f'expected one of: {", ".join(sorted(valid_auth_types))}.',
+                source="auth",
+            )
+
         auth_config = self.config.auth["fields"]
         validator = Draft7Validator(auth_config)
         errors = sorted(validator.iter_errors(context.auth["credentials"]), key=lambda e: e.path)

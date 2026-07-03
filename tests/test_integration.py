@@ -695,6 +695,22 @@ async def test_execute_action_missing_auth_type_rejected(integration):
     assert "auth_type" in result.result["message"]
 
 
+async def test_execute_action_unknown_auth_type_rejected(integration):
+    """Envelope with an auth_type outside the AuthType enum is rejected."""
+
+    @integration.action("test_action")
+    class Handler(ActionHandler):
+        async def execute(self, inputs, context):
+            return ActionResult(data={"greeting": "hi"})
+
+    ctx = ExecutionContext(auth={"auth_type": "Bogus", "credentials": {"api_key": "k"}})
+    result = await integration.execute_action("test_action", {"name": "x"}, ctx)
+
+    assert result.type == ResultType.VALIDATION_ERROR
+    assert result.result["source"] == "auth"
+    assert 'Unknown auth_type "Bogus"' in result.result["message"]
+
+
 async def test_execute_action_empty_auth_type_rejected(integration):
     """Envelope with an empty-string auth_type is rejected."""
 

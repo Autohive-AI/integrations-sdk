@@ -821,7 +821,7 @@ class MyAction(ActionHandler):
 </span><span id="L-364"><a href="#L-364"><span class="linenos">364</span></a><span class="sd">            object matches the ``auth.fields`` schema in ``config.json``.  Local</span>
 </span><span id="L-365"><a href="#L-365"><span class="linenos">365</span></a><span class="sd">            tests must use the same wrapped shape (e.g.</span>
 </span><span id="L-366"><a href="#L-366"><span class="linenos">366</span></a><span class="sd">            ``{&quot;auth_type&quot;: &quot;Custom&quot;, &quot;credentials&quot;: {&quot;api_key&quot;: &quot;...&quot;}}``); flat</span>
-</span><span id="L-367"><a href="#L-367"><span class="linenos">367</span></a><span class="sd">            auth is no longer supported as of SDK 2.0.1.  Handlers should read</span>
+</span><span id="L-367"><a href="#L-367"><span class="linenos">367</span></a><span class="sd">            auth is not supported.  Handlers should read</span>
 </span><span id="L-368"><a href="#L-368"><span class="linenos">368</span></a><span class="sd">            individual credentials via ``context.auth[&quot;credentials&quot;]`` (for</span>
 </span><span id="L-369"><a href="#L-369"><span class="linenos">369</span></a><span class="sd">            example ``context.auth[&quot;credentials&quot;].get(&quot;api_key&quot;, &quot;&quot;)``); strict</span>
 </span><span id="L-370"><a href="#L-370"><span class="linenos">370</span></a><span class="sd">            validation guarantees this shape exists before a handler runs.</span>
@@ -1208,7 +1208,7 @@ class MyAction(ActionHandler):
 </span><span id="L-751"><a href="#L-751"><span class="linenos">751</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_auth</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ExecutionContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="L-752"><a href="#L-752"><span class="linenos">752</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate the auth envelope&#39;s credentials against ``auth.fields``.</span>
 </span><span id="L-753"><a href="#L-753"><span class="linenos">753</span></a>
-</span><span id="L-754"><a href="#L-754"><span class="linenos">754</span></a><span class="sd">        As of SDK 2.0.1 the platform always passes ``context.auth`` as the</span>
+</span><span id="L-754"><a href="#L-754"><span class="linenos">754</span></a><span class="sd">        The platform always passes ``context.auth`` as the</span>
 </span><span id="L-755"><a href="#L-755"><span class="linenos">755</span></a><span class="sd">        wrapped envelope ``{&quot;auth_type&quot;: ..., &quot;credentials&quot;: {...}}``.  The</span>
 </span><span id="L-756"><a href="#L-756"><span class="linenos">756</span></a><span class="sd">        ``auth.fields`` schema in ``config.json`` describes only the inner</span>
 </span><span id="L-757"><a href="#L-757"><span class="linenos">757</span></a><span class="sd">        ``credentials`` object, so validation runs against</span>
@@ -1236,7 +1236,7 @@ class MyAction(ActionHandler):
 </span><span id="L-779"><a href="#L-779"><span class="linenos">779</span></a>            <span class="k">raise</span> <span class="n">ValidationError</span><span class="p">(</span>
 </span><span id="L-780"><a href="#L-780"><span class="linenos">780</span></a>                <span class="s1">&#39;context.auth must be the platform auth envelope &#39;</span>
 </span><span id="L-781"><a href="#L-781"><span class="linenos">781</span></a>                <span class="s1">&#39;{&quot;auth_type&quot;: ..., &quot;credentials&quot;: {...}} with a non-empty &#39;</span>
-</span><span id="L-782"><a href="#L-782"><span class="linenos">782</span></a>                <span class="s1">&#39;auth_type; flat auth is no longer supported as of SDK 2.0.1.&#39;</span><span class="p">,</span>
+</span><span id="L-782"><a href="#L-782"><span class="linenos">782</span></a>                <span class="s1">&#39;auth_type; flat auth is not supported.&#39;</span><span class="p">,</span>
 </span><span id="L-783"><a href="#L-783"><span class="linenos">783</span></a>                <span class="n">source</span><span class="o">=</span><span class="s2">&quot;auth&quot;</span><span class="p">,</span>
 </span><span id="L-784"><a href="#L-784"><span class="linenos">784</span></a>            <span class="p">)</span>
 </span><span id="L-785"><a href="#L-785"><span class="linenos">785</span></a>
@@ -3151,7 +3151,7 @@ the Bearer token — no manual auth handling needed.</p>
 </span><span id="ExecutionContext-365"><a href="#ExecutionContext-365"><span class="linenos">365</span></a><span class="sd">            object matches the ``auth.fields`` schema in ``config.json``.  Local</span>
 </span><span id="ExecutionContext-366"><a href="#ExecutionContext-366"><span class="linenos">366</span></a><span class="sd">            tests must use the same wrapped shape (e.g.</span>
 </span><span id="ExecutionContext-367"><a href="#ExecutionContext-367"><span class="linenos">367</span></a><span class="sd">            ``{&quot;auth_type&quot;: &quot;Custom&quot;, &quot;credentials&quot;: {&quot;api_key&quot;: &quot;...&quot;}}``); flat</span>
-</span><span id="ExecutionContext-368"><a href="#ExecutionContext-368"><span class="linenos">368</span></a><span class="sd">            auth is no longer supported as of SDK 2.0.1.  Handlers should read</span>
+</span><span id="ExecutionContext-368"><a href="#ExecutionContext-368"><span class="linenos">368</span></a><span class="sd">            auth is not supported.  Handlers should read</span>
 </span><span id="ExecutionContext-369"><a href="#ExecutionContext-369"><span class="linenos">369</span></a><span class="sd">            individual credentials via ``context.auth[&quot;credentials&quot;]`` (for</span>
 </span><span id="ExecutionContext-370"><a href="#ExecutionContext-370"><span class="linenos">370</span></a><span class="sd">            example ``context.auth[&quot;credentials&quot;].get(&quot;api_key&quot;, &quot;&quot;)``); strict</span>
 </span><span id="ExecutionContext-371"><a href="#ExecutionContext-371"><span class="linenos">371</span></a><span class="sd">            validation guarantees this shape exists before a handler runs.</span>
@@ -3359,7 +3359,7 @@ optional Bearer-token injection for platform OAuth integrations.</p>
         object matches the <code>auth.fields</code> schema in <code>config.json</code>.  Local
         tests must use the same wrapped shape (e.g.
         <code>{"auth_type": "Custom", "credentials": {"api_key": "..."}}</code>); flat
-        auth is no longer supported as of SDK 2.0.1.  Handlers should read
+        auth is not supported.  Handlers should read
         individual credentials via <code>context.auth["credentials"]</code> (for
         example <code>context.auth["credentials"].get("api_key", "")</code>); strict
         validation guarantees this shape exists before a handler runs.
@@ -3864,7 +3864,7 @@ immediately (no automatic retry).</p>
 </span><span id="Integration-752"><a href="#Integration-752"><span class="linenos">752</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_auth</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ExecutionContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="Integration-753"><a href="#Integration-753"><span class="linenos">753</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate the auth envelope&#39;s credentials against ``auth.fields``.</span>
 </span><span id="Integration-754"><a href="#Integration-754"><span class="linenos">754</span></a>
-</span><span id="Integration-755"><a href="#Integration-755"><span class="linenos">755</span></a><span class="sd">        As of SDK 2.0.1 the platform always passes ``context.auth`` as the</span>
+</span><span id="Integration-755"><a href="#Integration-755"><span class="linenos">755</span></a><span class="sd">        The platform always passes ``context.auth`` as the</span>
 </span><span id="Integration-756"><a href="#Integration-756"><span class="linenos">756</span></a><span class="sd">        wrapped envelope ``{&quot;auth_type&quot;: ..., &quot;credentials&quot;: {...}}``.  The</span>
 </span><span id="Integration-757"><a href="#Integration-757"><span class="linenos">757</span></a><span class="sd">        ``auth.fields`` schema in ``config.json`` describes only the inner</span>
 </span><span id="Integration-758"><a href="#Integration-758"><span class="linenos">758</span></a><span class="sd">        ``credentials`` object, so validation runs against</span>
@@ -3892,7 +3892,7 @@ immediately (no automatic retry).</p>
 </span><span id="Integration-780"><a href="#Integration-780"><span class="linenos">780</span></a>            <span class="k">raise</span> <span class="n">ValidationError</span><span class="p">(</span>
 </span><span id="Integration-781"><a href="#Integration-781"><span class="linenos">781</span></a>                <span class="s1">&#39;context.auth must be the platform auth envelope &#39;</span>
 </span><span id="Integration-782"><a href="#Integration-782"><span class="linenos">782</span></a>                <span class="s1">&#39;{&quot;auth_type&quot;: ..., &quot;credentials&quot;: {...}} with a non-empty &#39;</span>
-</span><span id="Integration-783"><a href="#Integration-783"><span class="linenos">783</span></a>                <span class="s1">&#39;auth_type; flat auth is no longer supported as of SDK 2.0.1.&#39;</span><span class="p">,</span>
+</span><span id="Integration-783"><a href="#Integration-783"><span class="linenos">783</span></a>                <span class="s1">&#39;auth_type; flat auth is not supported.&#39;</span><span class="p">,</span>
 </span><span id="Integration-784"><a href="#Integration-784"><span class="linenos">784</span></a>                <span class="n">source</span><span class="o">=</span><span class="s2">&quot;auth&quot;</span><span class="p">,</span>
 </span><span id="Integration-785"><a href="#Integration-785"><span class="linenos">785</span></a>            <span class="p">)</span>
 </span><span id="Integration-786"><a href="#Integration-786"><span class="linenos">786</span></a>

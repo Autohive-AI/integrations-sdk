@@ -112,7 +112,7 @@ async def test_execute_action_applies_integration_identity_to_fetch_user_agent(i
     with aioresponses() as mock_aio:
         mock_aio.get(url, payload={"ok": True})
 
-        ctx = ExecutionContext(auth={"api_key": "k"})
+        ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
         result = await integration.execute_action("test_action", {"name": "x"}, ctx)
 
     request = mock_aio.requests[("GET", URL(url))][0]
@@ -129,7 +129,7 @@ async def test_execute_action_restores_previous_context_integration_identity(int
         async def execute(self, inputs, context):
             return ActionResult(data={"greeting": "hi"})
 
-    ctx = ExecutionContext(auth={"api_key": "k"})
+    ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "k"}})
     ctx._set_integration_identity("previous-integration", "9.9.9")
 
     result = await integration.execute_action("test_action", {"name": "x"}, ctx)

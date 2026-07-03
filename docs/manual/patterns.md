@@ -226,11 +226,13 @@ is allowed and recommended. Read credentials directly from the envelope via
 
 ```python
 def get_base_url(context: ExecutionContext) -> str:
-    domain = context.auth["credentials"].get("domain", "")
+    credentials = context.auth.get("credentials", {})
+    domain = credentials.get("domain", "")
     return f"https://{domain}.freshdesk.com/api/v2"
 
 def get_headers(context: ExecutionContext) -> Dict[str, str]:
-    api_key = context.auth["credentials"].get("api_key", "")
+    credentials = context.auth.get("credentials", {})
+    api_key = credentials.get("api_key", "")
     auth_bytes = f"{api_key}:X".encode("ascii")
     return {
         "Authorization": f"Basic {base64.b64encode(auth_bytes).decode('ascii')}",
@@ -263,14 +265,15 @@ async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> Ac
 
 ### Credentials
 
-Never hardcode API keys, tokens, or secrets. Always read them from `context.auth["credentials"]`:
+Never hardcode API keys, tokens, or secrets. Always read them from `context.auth`:
 
 ```python
 # WRONG
 headers = {"Authorization": "Bearer sk-abc123"}
 
 # CORRECT
-api_key = context.auth["credentials"].get("api_key", "")
+credentials = context.auth.get("credentials", {})
+api_key = credentials.get("api_key", "")
 headers = {"Authorization": f"Bearer {api_key}"}
 ```
 

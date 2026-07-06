@@ -1,5 +1,61 @@
 # Release Notes
 
+## 2.0.1
+
+### Behavior Change
+
+Auth validation now expects the platform auth envelope only. Flat auth is no
+longer accepted. Production runtime behavior is unchanged (the platform has
+always sent the envelope); this release fixes the SDK to validate the object
+production actually sends. Local tests and scripts that construct flat auth
+contexts must migrate to the wrapped shape.
+
+The platform delivers integration auth as a wrapped envelope:
+
+```json
+{"auth_type": "Custom", "credentials": {"api_key": "...", "api_url": "..."}}
+```
+
+The `auth.fields` schema in `config.json` describes the inner `credentials`
+object. Previously the SDK validated the *entire* envelope against
+`auth.fields`, so any non-empty `required` list failed before the handler ran
+(the ActiveCampaign outage), while an empty `required` list passed vacuously
+even with empty credentials.
+
+As of 2.0.1 the SDK validates only `context.auth["credentials"]` against
+`auth.fields`. `auth.fields.required` is now honoured and recommended. If
+`context.auth` is not a wrapped envelope with a `credentials` dict, validation
+fails with a `VALIDATION_ERROR` whose `source` is `"auth"`.
+
+**Before (2.x local test):**
+```python
+ctx = ExecutionContext(auth={"api_key": "..."})  # flat
+```
+
+**After (2.0.1):**
+```python
+ctx = ExecutionContext(auth={"auth_type": "Custom", "credentials": {"api_key": "..."}})
+```
+
+### Migration Guide
+
+1. **Wrap auth in local tests and any manual `ExecutionContext` construction**
+   in the `{"auth_type": ..., "credentials": {...}}` envelope. Production
+   traffic is already wrapped by the platform.
+2. **Read credentials directly from the envelope** via
+   `context.auth["credentials"]`:
+   ```python
+   # Before
+   api_key = context.auth.get("api_key", "")
+   # After
+   api_key = context.auth["credentials"].get("api_key", "")
+   ```
+3. **Keep `auth.fields.required`** — it is now enforced against the credentials
+   object and is the recommended way to require credentials.
+4. **Note on pins:** `~=2.0.0` pins resolve to 2.0.1 automatically on the next
+   rebuild; there is no flat-auth backward compatibility, so migrate tests
+   before rebuilding. Pin `~=2.0.1` to express the requirement explicitly.
+
 ## 2.0.0
 
 ### ⚠️ Breaking Change
@@ -68,7 +124,7 @@ items = response.data["results"]
 
 - Missed version update in init file.
 
-## 1.0.0 
+## 1.0.0
 - Add ActionResult and IntegrationResult classes to provide standardized result handling with optional billing/cost tracking capabilities for the integrations SDK
 - Introduce SDK support for connected account information so integrations can expose the authorized user's identity; add documentation and public exports.
 

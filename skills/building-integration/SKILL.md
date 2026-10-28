@@ -208,6 +208,6 @@ Key settings:
 | Ruff format errors | `ruff format --config ../autohive-integrations-tooling/ruff.toml <name>` |
 | Bandit security issue | Add `# nosec B105` for test credential strings; fix real issues |
 | Config-code sync | Ensure actions in `config.json` match handlers in source code |
-| Missing test files | Create `tests/test_<name>_unit.py` (see `writing-unit-tests` skill) |
+| Missing test files | Create `tests/test_<name>_unit.py` (see the `writing-tests` skill, `unit-tests.md`) |
 | Import errors | Check `requirements.txt` has all dependencies; check `__init__.py` exports |
 | Integration tests use env vars but `.env.example` missing entries | Add blank entries for every referenced env var to root `.env.example`; treat as blocking for PRs adding/changing integration tests |

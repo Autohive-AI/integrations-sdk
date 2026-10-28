@@ -1,8 +1,3 @@
----
-name: writing-unit-tests
-description: "Writes pytest unit tests for an Autohive integration using the mock_context + FetchResponse pattern. Use when asked to write tests, add test coverage, create unit tests, or test an integration. Covers file structure, test categories, and coverage expectations."
----
-
 # Writing Unit Tests for an Integration
 
 ## Prerequisites

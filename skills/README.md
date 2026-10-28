@@ -10,8 +10,7 @@ Agent skills for AI coding assistants (Amp, Claude Code, etc.) that automate com
 | [`migrating-private-integration/`](migrating-private-integration/) | Migrates an integration from the private repo to the public integrations repo |
 | [`reviewing-integration-prs/`](reviewing-integration-prs/) | Reviews integration PRs for code quality, security, tests, docs, and skill compliance |
 | [`upgrading-sdk-v2/`](upgrading-sdk-v2/) | Upgrades an integration from SDK 1.x to 2.0.0 |
-| [`writing-unit-tests/`](writing-unit-tests/) | Writes pytest unit tests for an integration using mock_context + FetchResponse |
-| [`writing-integration-tests/`](writing-integration-tests/) | Writes pytest e2e integration tests that call real APIs using the live_context fixture |
+| [`writing-tests/`](writing-tests/) | Writes pytest unit tests (mock_context + FetchResponse) and live integration tests (live_context), including `tests/teamcity.env` for TeamCity |
 
 ## Setup
 

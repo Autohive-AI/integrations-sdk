@@ -1,8 +1,3 @@
----
-name: writing-integration-tests
-description: "Writes pytest end-to-end integration tests for an Autohive integration that call real APIs using the live_context fixture pattern. Use when asked to write integration tests, add e2e tests, create live API tests, or test an integration against a real service. Covers file structure, live_context fixture variants, required root .env.example updates, environment variable handling, destructive markers, and test organization."
----
-
 # Writing Integration Tests for an Integration
 
 ## Required: root `.env.example` update
@@ -16,6 +11,8 @@ This applies to every variable read through `env_credentials(...)`, `os.environ.
 - Variables used only by destructive tests
 
 If a variable is read by the test file, either add a blank template entry to root `.env.example` or remove the unused env-var read. Missing entries should block integration-test PRs until fixed.
+
+To run the tests in TeamCity, the same variables must also be supplied through `<integration>/tests/teamcity.env`. See [Running Live Tests in TeamCity](#running-live-tests-in-teamcity).
 
 ## Prerequisites
 
@@ -31,7 +28,7 @@ If a variable is read by the test file, either add a blank template entry to roo
 | Network calls | Mocked via `mock_context` | Real via `live_context` + aiohttp |
 | File suffix | `_unit.py` | `_integration.py` |
 | Marker | `pytest.mark.unit` | `pytest.mark.integration` |
-| CI | Runs by default | Never runs in CI |
+| CI | GitHub Actions on every PR | Never in GitHub Actions; non-destructive tests run in TeamCity |
 | Credentials | Fake test tokens | Real API keys/tokens from env vars |
 | Speed | Milliseconds | Seconds (network I/O) |
 
@@ -52,7 +49,7 @@ myintegration/tests/
 
 ### Double Exclusion from CI
 
-Integration tests are excluded from CI and default `pytest` runs by **two mechanisms**:
+Integration tests are excluded from GitHub Actions CI and default `pytest` runs by **two mechanisms**:
 
 1. **File naming**: `pyproject.toml` has `python_files = ["test_*_unit.py"]`, so `test_*_integration.py` files are never collected
 2. **Marker**: `addopts = "-m unit"` in `pyproject.toml` filters to unit-only by default
@@ -61,7 +58,7 @@ This double exclusion ensures integration tests never run accidentally.
 
 ### File Header (boilerplate)
 
-With `sys.path` set up in `tests/conftest.py` (see the unit tests skill for the standard shape), an integration test file can use plain imports:
+With `sys.path` set up in `tests/conftest.py` (see [`unit-tests.md`](unit-tests.md) for the standard shape), an integration test file can use plain imports:
 
 ```python
 """
@@ -87,7 +84,7 @@ from myintegration import myintegration
 pytestmark = pytest.mark.integration
 ```
 
-Use the `importlib` fallback boilerplate from the unit tests skill only when plain imports won't work for the integration's layout.
+Use the `importlib` fallback boilerplate from [`unit-tests.md`](unit-tests.md) only when plain imports won't work for the integration's layout.
 
 ## Environment Variables
 
@@ -482,23 +479,189 @@ Write actions (create/update/delete) need at least:
 1. One `@pytest.mark.destructive` test proving it works
 2. Cleanup of created data where possible (lifecycle tests)
 
+## Running Live Tests in TeamCity
+
+The TeamCity **Live Tests** build runs the non-destructive integration tests for pull requests from the Autohive team. It tests each top-level integration directory that the pull request changes, with the same command as a local safe run:
+
+```bash
+pytest <integration>/tests/test_*_integration.py -m "integration and not destructive"
+```
+
+The build posts one comment on the pull request that shows the result for each integration.
+
+TeamCity does not use `.env`. The tests get their variables from two sources:
+
+1. **Platform OAuth integrations** get an access token automatically (see [Platform OAuth integrations](#platform-oauth-integrations)).
+2. All other variables come from **`<integration>/tests/teamcity.env`**, which you commit with the integration. This includes custom auth credentials (see [Custom auth credentials](#custom-auth-credentials)).
+
+The tests must read every credential and test ID from environment variables, including the `<INTEGRATION>_ACCESS_TOKEN` of a platform OAuth integration, and skip cleanly when a variable is missing. Every variable in `teamcity.env` must also be in root `.env.example`.
+
+### What is a secret
+
+**The integrations repository is public.** Everything in `teamcity.env` is public, so the only question is whether a value can be public.
+
+A value is a **secret** if a person who has it can get access to something, or can act as someone. Examples:
+
+- API keys, access tokens, refresh tokens, bot tokens
+- Client secrets, consumer secrets, signing secrets, passwords
+- Service-role keys and other admin keys
+- A URL that contains a credential, or that identifies a private tenant of the test account (for example, a Ghost site URL or a Supabase project URL)
+
+A value is **not a secret** if it gives no access without a credential. Examples:
+
+- IDs of records in the test account (job, contact, project, task, or customer IDs)
+- Public or sandbox API base URLs that are the same for all customers
+- Fixed test configuration, such as a table name, a function name, or an app name
+- Shared support addresses and other public contact details
+
+When you are not sure, treat the value as a secret.
+
+Only use a dedicated test or sandbox account at the provider. Never put a real customer's data or credentials in a test variable.
+
+### Where each value goes
+
+| Value | `teamcity.env` line |
+|---|---|
+| Not a secret: write the value directly | `JOBADDER_TEST_JOB_ID=21722` |
+| A credential that a user enters in Autohive for a **custom auth** integration (a field in `config.json` `auth.fields.properties`) | `NZ_LEGISLATION_API_KEY=ah:customAuth:api_key` |
+| Any other secret, for example a bot token, an admin key, a tenant URL, or a credential for an integration that has no custom auth | `AGNO_AGENT_API_TOKEN=ah:secret` |
+| The OAuth access token of a **platform OAuth** integration | Do not add a line. The build sets `<INTEGRATION>_ACCESS_TOKEN`. |
+
+For a custom auth credential, use `ah:customAuth` in preference to `ah:secret`. The credential is then supplied the same way that users connect the integration in Autohive.
+
+The real values for `ah:customAuth` and `ah:secret` are stored outside the repository by the Autohive team. You only commit the marker.
+
+### The `teamcity.env` file
+
+**Location:** `<integration>/tests/teamcity.env`, next to the test files. For example, `nz-legislation/tests/teamcity.env`. Each integration has its own file. There is no file at the repository root.
+
+**Format:**
+
+```bash
+# Comment lines and blank lines are ignored.
+NAME=value
+```
+
+- Write one `NAME=value` on each line.
+- `NAME` must match `[A-Z][A-Z0-9_]*`. Use the exact name that the tests read.
+- The build trims spaces around the name and the value. It removes one pair of matching quotes around the value (`"..."` or `'...'`).
+- Do not use `export`, `${VAR}` expansion, or comments at the end of a line. A `#` after the `=` is part of the value.
+- If a line is not in this format, the build does not run that integration's tests. It reports `Could not read tests/teamcity.env (line N is not NAME=value with an upper-case name)`.
+- Every name in the file must also be in the root `.env.example`.
+
+For optional fixtures that are not ready yet, add the line as a comment and explain what it enables:
+
+```bash
+# Optional fixtures: set only for a dedicated test account.
+# GHOST_TEST_POST_ID=
+```
+
+### Plain values
+
+Write the value directly. The build gives it to pytest without a change.
+
+```bash
+JOBADDER_API_URL=https://sandboxapi.jobadder.com/v2
+JOBADDER_TEST_JOB_ID=21722
+```
+
+A test ID belongs to the provider account that created it. Use IDs from the same test account whose credentials the build uses. If you do not, the tests will find no records.
+
+### Custom auth credentials
+
+Use `ah:customAuth:<field>` for an integration whose `config.json` has `"auth": {"type": "custom", ...}`. `<field>` is a key in `auth.fields.properties`:
+
+```json
+"auth": {
+  "type": "custom",
+  "title": "New Zealand Legislation API key",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "api_key": {"type": "string", "format": "password", "label": "API key"}
+    }
+  }
+}
+```
+
+```bash
+NZ_LEGISLATION_API_KEY=ah:customAuth:api_key
+```
+
+The build sets each variable to that field of the test credentials that the Autohive team connected for the integration's custom auth. The integration does not have to be published.
+
+#### First-time setup
+
+1. Add the `ah:customAuth` lines to `tests/teamcity.env` and open the pull request.
+2. The first build reports that no connection exists for the auth definition's `title`. This result is expected.
+3. Ask the Autohive team to connect the test account's credentials for the integration, then run the build again.
+
+#### Rules
+
+- Every `<field>` must be in `auth.fields.properties`. If it is not, the build reports `tests/teamcity.env asks for custom auth fields config.json does not declare`.
+- If you use `ah:customAuth` in an integration whose auth type is not `custom`, the build reports `tests/teamcity.env uses ah:customAuth but config.json does not declare custom auth`.
+- If the connected credentials have no value for a requested field, the integration does not run and the build names the field.
+- **If a pull request changes `auth.title` or `auth.fields`, the credentials must be connected again** before the tests can pass. Ask the Autohive team when you change the auth definition.
+
+### Other secrets
+
+Use `ah:secret` for secrets that a custom auth connection does not hold.
+
+```bash
+AGNO_AGENT_API_TOKEN=ah:secret
+```
+
+The build reads the value from the Autohive team's secret store, by the integration's directory name and the variable name.
+
+#### First-time setup
+
+1. Add the `ah:secret` lines to `tests/teamcity.env`.
+2. Ask the Autohive team to add each secret for the integration. Give them the integration directory name and the variable names, and send the test-account values through a secure channel.
+3. Never put a real value in a commit, a pull request, an issue, or a chat message.
+
+If a secret has not been added, the integration does not run and the build names the missing variable.
+
+### Platform OAuth integrations
+
+For an integration with `"auth": {"type": "platform", "provider": "<Provider>"}`, the build supplies an access token as `<INTEGRATION>_ACCESS_TOKEN`. `<INTEGRATION>` is the directory name in upper case, with each character that is not a letter or a digit changed to `_`. For example, `google-calendar` becomes `GOOGLE_CALENDAR_ACCESS_TOKEN`.
+
+- The tests must read that exact variable name.
+- Do not add `<INTEGRATION>_ACCESS_TOKEN` to `teamcity.env`. The build ignores it, uses its own token, and writes a warning in the build log.
+- If the build cannot get a token for the provider, the integration does not run. Ask the Autohive team to connect a test account for the provider.
+- Other variables that a platform OAuth integration's tests need, such as test IDs, go in `teamcity.env` as usual.
+
+### Reading the result
+
+The pull request comment has one collapsible block for each integration:
+
+| Summary | Meaning |
+|---|---|
+| `N/N tests pass` | All tests that ran passed. Skipped tests are counted and listed. |
+| `M/N tests pass` with a cross | One or more tests failed. The failed tests are listed. |
+| `did not run` | A problem before or outside the tests. The block shows the reason, for example a malformed `teamcity.env`, a missing secret or connection, or failed dependency installation. The build fails. |
+| `all N tests were skipped` | The tests skipped, usually because a variable is missing. The build does **not** fail. Check that `teamcity.env` sets every variable that the tests need. |
+| `no live tests ran` | Every live test is marked `destructive`, so the build collected none. |
+
+The comment shows only test names. Assertion messages and skip reasons are in the TeamCity build. The build never prints the values of credentials.
+
 ## Workflow
 
 1. **Read the integration source** — understand each action and its auth mechanism
 2. **Check `config.json`** — determine auth type (none / API key / platform OAuth)
 3. **Choose the right `live_context` variant** — see the three variants above
 4. **Document env vars in root `.env.example` (required)** — add every env var referenced by the integration test file in the same PR; missing entries should block integration-test PRs
-5. **Write read-only tests first** — these are safe to run repeatedly
-6. **Add destructive tests** with `@pytest.mark.destructive` for write actions
-7. **Run read-only tests**:
+5. **Add `tests/teamcity.env`** — see [Running Live Tests in TeamCity](#running-live-tests-in-teamcity)
+6. **Write read-only tests first** — these are safe to run repeatedly
+7. **Add destructive tests** with `@pytest.mark.destructive` for write actions
+8. **Run read-only tests**:
    ```bash
    pytest <integration>/tests/test_*_integration.py -m "integration and not destructive"
    ```
-8. **Run destructive tests** (only when you're sure):
+9. **Run destructive tests** (only when you're sure):
    ```bash
    pytest <integration>/tests/test_*_integration.py -m "integration and destructive"
    ```
-9. **Document the run commands** in the PR description and the integration's
+10. **Document the run commands** in the PR description and the integration's
    README — safe (`-m "integration and not destructive"`) command first,
    destructive command second with a warning. Never recommend the bare
    `-m integration` form as the primary command.

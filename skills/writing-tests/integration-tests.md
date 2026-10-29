@@ -68,10 +68,12 @@ These tests call the real MyService API and require a valid access token
 set in the MYINTEGRATION_ACCESS_TOKEN environment variable (via .env or export).
 
 Run with:
-    pytest myintegration/tests/test_myintegration_integration.py -m integration
+    pytest myintegration/tests/test_myintegration_integration.py -m "integration and not destructive"
 
-Never runs in CI — the default pytest marker filter (-m unit) excludes these,
-and the file naming (test_*_integration.py) is not matched by python_files.
+Not collected by default pytest runs or GitHub Actions: the default marker
+filter (-m unit) excludes these, and the file naming (test_*_integration.py)
+is not matched by python_files. The TeamCity Live Tests build runs the
+non-destructive ones.
 """
 
 import pytest

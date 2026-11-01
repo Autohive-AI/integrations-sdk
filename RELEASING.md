@@ -6,20 +6,19 @@
 major version, use a support branch to release changes for the previous
 major version without including incompatible development changes.
 
-For example, `master` is on `3.0.0.dev0`, while `support/2.1.0` was created
+For example, `master` is on `3.0.0.dev0`, while `release/2.1.0` was created
 from the `2.0.1` tag for the 2.1.0 release. This preserves the User-Agent
 revert in 2.0.1; the 3.x development line retains the User-Agent change.
 
-1. Create `support/<target-version>` from the appropriate published release
+1. Create `release/<target-version>` from the appropriate published release
    tag, not from `master`. For a later maintenance release, start from the
    latest applicable release tag so earlier fixes are retained.
-2. Open feature and fix PRs against that support branch. Keep changes
+2. Open feature and fix PRs against that release branch. Keep changes
    compatible with the supported major version and use semantic versioning:
    additive APIs can require a minor release rather than a patch release.
-3. Keep tests enabled for both `master` and `support/**` in the workflow's
+3. Keep tests enabled for `master`, `release/**`, and any `support/**` branches in the workflow's
    push and pull-request filters. Require successful tests before merging.
-4. After the support changes are merged and verified, create
-   `release/<target-version>` from the reviewed support tip. Build and tag
+4. After the changes are merged and verified on `release/<target-version>`, build and tag
    the release from that line, not from `master`, using the checklist below.
 5. Forward-port applicable fixes, features, tests, and workflow changes to
    `master` through a separate PR. Cherry-pick or reapply the selected changes;
@@ -37,8 +36,9 @@ Existing integration dependency pins must be checked separately: for example,
 
 * Use semantic versioning
 
-* Create a release branch (`release/<a.b.c>`) from the reviewed source line:
-  `master` for its release, or the support branch for a supported-version release.
+* Create or use the release branch (`release/<a.b.c>`): start from `master`
+  for its release, or the appropriate published tag for a supported-version
+  release as described above.
 
 * Update `pyproject.toml` as required:
     - Version 

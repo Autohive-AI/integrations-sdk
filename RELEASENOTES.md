@@ -1,5 +1,42 @@
 # Release Notes
 
+## 2.1.0
+
+### New Feature
+
+`HTTPError` and `RateLimitError` now keep the response headers from the
+failed request. `ExecutionContext.fetch()` already exposed headers on
+successful `FetchResponse` objects; it now also sets `exc.headers` when it
+raises. Integrations can read provider headers that are needed to handle a
+failure, for example the `X-Allow-Duplicates` override code that JobAdder
+returns with HTTP 409.
+
+```python
+try:
+    await context.fetch(url, method="PUT", json=body)
+except HTTPError as exc:
+    code = next(
+        (v for k, v in exc.headers.items() if k.lower() == "x-allow-duplicates"),
+        None,
+    )
+    if exc.status == 409 and code:
+        return ActionError(message=f"{exc}. Retry with allow_duplicates={code} if intended.")
+    raise
+```
+
+### Compatibility
+
+- `headers` is an optional, keyword-only constructor argument. Existing
+  `HTTPError(status, message, response_data)` calls are unchanged, and
+  `exc.headers` is `{}` when no headers are given.
+- The exception message is unchanged (`HTTP {status}: {message}`). Headers are
+  never added to `str(exc)`, so they do not reach the platform error result,
+  logs or the agent unless an integration returns them on purpose. Return only
+  the specific header values a caller needs, and match header names
+  case-insensitively.
+- `RateLimitError.retry_after` and the retry behaviour of `fetch()` are
+  unchanged.
+
 ## 2.0.1
 
 ### Behavior Change

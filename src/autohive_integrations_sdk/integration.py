@@ -125,14 +125,29 @@ class ConfigurationError(Exception):
     pass
 
 class HTTPError(Exception):
-    """Raised by ``ExecutionContext.fetch()`` for non-2xx HTTP responses (except 429)."""
-    def __init__(self, status: int, message: str, response_data: Any = None):
+    """Raised by ``ExecutionContext.fetch()`` for non-2xx HTTP responses (except 429).
+
+    Response headers are available on ``headers`` for integrations that need
+    to inspect them. They are never included in the exception message, so
+    return only the specific header values a caller needs. Header names
+    should be matched case-insensitively.
+    """
+    def __init__(
+        self,
+        status: int,
+        message: str,
+        response_data: Any = None,
+        *,
+        headers: Optional[Dict[str, str]] = None,
+    ):
         self.status = status
         """Status code"""
         self.message = message
         """Error message"""
         self.response_data = response_data
         """Response data"""
+        self.headers = dict(headers) if headers is not None else {}
+        """Response headers (empty when not provided)"""
         super().__init__(f"HTTP {status}: {message}")
 
 class RateLimitError(HTTPError):
@@ -550,7 +565,8 @@ class ExecutionContext:
                         retry_after,
                         response.status,
                         "Rate limit exceeded",
-                        await response.text()
+                        await response.text(),
+                        headers=dict(response.headers),
                     )
 
                 try:
@@ -568,7 +584,12 @@ class ExecutionContext:
 
                 if not response.ok:
                     print(f"HTTP error encountered. Status: {response.status}. Result: {result}")
-                    raise HTTPError(response.status, str(result), result)
+                    raise HTTPError(
+                        response.status,
+                        str(result),
+                        result,
+                        headers=response_headers,
+                    )
 
                 return FetchResponse(
                     status=response.status,

@@ -96,6 +96,68 @@ async def test_fetch_http_error(mock_aio):
     assert exc_info.value.status == 500
 
 
+async def test_fetch_http_error_preserves_headers(mock_aio):
+    mock_aio.put(
+        BASE_URL,
+        status=409,
+        payload={"message": "duplicate email"},
+        headers={"X-Allow-Duplicates": "override-code-7f3a"},
+    )
+
+    async with ExecutionContext() as ctx:
+        with pytest.raises(HTTPError) as exc_info:
+            await ctx.fetch(BASE_URL, method="PUT")
+
+    err = exc_info.value
+    assert err.status == 409
+    assert err.response_data == {"message": "duplicate email"}
+    assert err.headers["X-Allow-Duplicates"] == "override-code-7f3a"
+
+
+async def test_fetch_http_error_headers_not_in_message(mock_aio):
+    """Headers must never leak into str(exc), which the platform serializes."""
+    secret = "distinctive-header-value-91c2"
+    mock_aio.get(
+        BASE_URL,
+        status=400,
+        body="bad request",
+        headers={"X-Debug-Token": secret},
+        content_type="text/plain",
+    )
+
+    async with ExecutionContext() as ctx:
+        with pytest.raises(HTTPError) as exc_info:
+            await ctx.fetch(BASE_URL)
+
+    err = exc_info.value
+    assert err.headers["X-Debug-Token"] == secret
+    assert str(err) == "HTTP 400: bad request"
+    assert secret not in str(err)
+    assert secret not in repr(err)
+    assert secret not in err.message
+
+
+async def test_fetch_rate_limit_preserves_headers(mock_aio):
+    mock_aio.get(
+        BASE_URL,
+        status=429,
+        body="rate limited",
+        headers={"Retry-After": "15", "X-RateLimit-Reset": "1700000000"},
+        content_type="text/plain",
+    )
+
+    async with ExecutionContext() as ctx:
+        with pytest.raises(RateLimitError) as exc_info:
+            await ctx.fetch(BASE_URL)
+
+    err = exc_info.value
+    assert err.retry_after == 15
+    assert err.response_data == "rate limited"
+    assert err.headers["Retry-After"] == "15"
+    assert err.headers["X-RateLimit-Reset"] == "1700000000"
+    assert str(err) == "HTTP 429: Rate limit exceeded"
+
+
 # ── Auth injection ───────────────────────────────────────────────────────────
 
 

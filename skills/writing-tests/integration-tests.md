@@ -644,7 +644,7 @@ The pull request comment has one collapsible block for each integration:
 | `all N tests were skipped` | The tests skipped, usually because a variable is missing. The build does **not** fail. Check that `teamcity.env` sets every variable that the tests need. |
 | `no live tests ran` | Every live test is marked `destructive`, so the build collected none. |
 
-The comment shows only test names. Assertion messages and skip reasons are in the TeamCity build. The build never prints the values of credentials.
+The comment shows only test names. Assertion messages and skip reasons are in the TeamCity build. The runner does not explicitly log resolved credentials. Tests must also avoid including secrets in output, assertion messages, or skip reasons.
 
 ## Workflow
 

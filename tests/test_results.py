@@ -102,6 +102,7 @@ def test_http_error():
     assert err.message == "not found"
     assert err.response_data == {"detail": "nope"}
     assert "404" in str(err)
+    assert err.headers == {}
 
 
 def test_rate_limit_error():
@@ -109,6 +110,32 @@ def test_rate_limit_error():
     assert isinstance(err, HTTPError)
     assert err.retry_after == 30
     assert err.status == 429
+    assert err.headers == {}
+
+
+def test_http_error_positional_construction_has_empty_headers():
+    err = HTTPError(500, "boom", {"detail": "x"})
+    assert err.headers == {}
+    assert str(err) == "HTTP 500: boom"
+
+
+def test_http_error_headers_are_copied():
+    source = {"X-Allow-Duplicates": "abc"}
+    err = HTTPError(409, "conflict", headers=source)
+    source["X-Allow-Duplicates"] = "changed"
+    assert err.headers == {"X-Allow-Duplicates": "abc"}
+    assert str(err) == "HTTP 409: conflict"
+
+
+def test_http_error_headers_are_keyword_only():
+    with pytest.raises(TypeError):
+        HTTPError(409, "conflict", None, {"X-Allow-Duplicates": "abc"})
+
+
+def test_rate_limit_error_forwards_headers():
+    err = RateLimitError(30, 429, "slow down", "body", headers={"Retry-After": "30"})
+    assert err.headers == {"Retry-After": "30"}
+    assert err.response_data == "body"
 
 
 # ── Enums ────────────────────────────────────────────────────────────────────

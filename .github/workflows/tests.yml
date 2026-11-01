@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [master]
+    branches: [master, 'support/**']
   pull_request:
-    branches: [master]
+    branches: [master, 'support/**']
 
 permissions:
   contents: read

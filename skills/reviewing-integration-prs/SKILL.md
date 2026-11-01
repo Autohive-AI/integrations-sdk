@@ -26,12 +26,12 @@ Apply these existing skills when the PR touches their area:
 | Context in PR | Apply this skill/checklist |
 |---|---|
 | Any integration implementation, config, README, or tests changed | `building-integration` |
-| Unit tests added or changed | `writing-unit-tests` |
-| Integration tests added or changed | `writing-integration-tests` |
+| Unit tests added or changed | `writing-tests` (`unit-tests.md`) |
+| Integration tests or `tests/teamcity.env` added or changed | `writing-tests` (`integration-tests.md`) |
 | `requirements.txt` changes SDK 1.x → 2.x, or fetch handling changes | `upgrading-sdk-v2` |
 | Private → public migration, copied integration, public publishing | `migrating-private-integration` |
 
-When reviewing, explicitly say which sub-skill contexts applied. Example: “Applied: building-integration, writing-integration-tests.”
+When reviewing, explicitly say which sub-skill contexts applied. Example: “Applied: building-integration, writing-tests (integration).”
 
 ## Review Workflow
 
@@ -121,14 +121,14 @@ Ask explicitly during review: **Does this PR test the same SDK/platform contract
 
 The root `.env.example` check is mandatory for any PR that adds or changes `test_*_integration.py`. Do not rely on CI to catch this; review it manually against the test file.
 
-For unit tests, apply `writing-unit-tests`:
+For unit tests, apply `writing-tests` (`unit-tests.md`):
 
 - Tests are named `test_*_unit.py`.
 - They use `mock_context`, `make_context`, and `FetchResponse` correctly for SDK 2.x.
 - They cover happy paths, request shape, validation/error paths, edge cases, and response shape where applicable.
 - Test credential strings use placeholders and `# nosec B105` where needed.
 
-For integration tests, apply `writing-integration-tests`:
+For integration tests, apply `writing-tests` (`integration-tests.md`):
 
 - Tests are named `test_*_integration.py` and marked `pytest.mark.integration`.
 - Destructive tests are marked `pytest.mark.destructive` and clean up data where possible.
@@ -136,6 +136,7 @@ For integration tests, apply `writing-integration-tests`:
 - Tests skip cleanly when credentials or required test IDs are missing.
 - Every env var read by `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers is listed as a blank template entry in root `.env.example`.
 - Optional test IDs, destructive-test-only variables, and module-level env constants count; either document them in root `.env.example` or remove unused reads.
+- `tests/teamcity.env`, if present, has no secret as a plain value, and every `ah:customAuth:<field>` names a field in `config.json` `auth.fields.properties`. A plain secret is a blocker.
 
 Use a focused search while reviewing:
 
@@ -181,7 +182,7 @@ Use these categories:
 ```markdown
 ## Integration PR review
 
-Applied sub-skills: building-integration, writing-unit-tests, writing-integration-tests
+Applied sub-skills: building-integration, writing-tests (unit, integration)
 
 ### 🚫 Blockers
 - [file:line] Issue and why it blocks merge. Suggested fix.

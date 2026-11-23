@@ -39,6 +39,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union, Type, TypeVar, Generic, ClassVar
 from urllib.parse import urlencode
+from uuid import uuid4
 
 # Third-Party Imports
 import aiohttp
@@ -117,7 +118,9 @@ class HTTPError(Exception):
     Response headers are available on ``headers`` for integrations that need
     to inspect them. They are never included in the exception message, so
     return only the specific header values a caller needs. Header names
-    should be matched case-insensitively.
+    should be matched case-insensitively. Errors raised by ``fetch()`` use a
+    generic message; provider details remain available on ``response_data``
+    for explicit inspection and must not be logged or returned wholesale.
     """
     def __init__(
         self,
@@ -142,7 +145,10 @@ class RateLimitError(HTTPError):
 
     Attributes:
         retry_after: Seconds to wait before retrying, taken from the
-            ``Retry-After`` response header (defaults to 60 if absent).
+            ``Retry-After`` response header. ``fetch()`` accepts integer delays
+            from 0 through 86,400 seconds (24 hours), inclusive; missing,
+            malformed or out-of-range values default to 60 seconds. The raw
+            header remains available on ``headers`` for explicit inspection.
     """
     def __init__(self, retry_after: int, *args, **kwargs):
         self.retry_after = retry_after
@@ -405,9 +411,20 @@ class ExecutionContext:
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def __aenter__(self):
-        if not self._session:
-            self._session = aiohttp.ClientSession()
+        await self._ensure_session()
         return self
+
+    async def _ensure_session(self):
+        if not self._session:
+            session = aiohttp.ClientSession()
+            # aiohttp >=3.11,<4 has no public switch for its implicit connection
+            # replay. Keep this compatibility dependency isolated and fail closed
+            # if it changes, so the SDK retry limit remains authoritative.
+            if not hasattr(session, "_retry_connection"):
+                await session.close()
+                raise ConfigurationError("Unsupported aiohttp transport: automatic replay cannot be disabled.")
+            session._retry_connection = False
+            self._session = session
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self._session:
@@ -434,7 +451,13 @@ class ExecutionContext:
 
         Retries up to ``max_retries`` (default 3) on transient network errors
         with exponential back-off.  HTTP 429 responses raise ``RateLimitError``
-        immediately (no automatic retry).
+        immediately (no automatic retry). The SDK owns connection retries;
+        aiohttp's implicit replay is disabled. Starting ``retry_count`` at
+        ``max_retries`` disables network retries for an uncertain write.
+
+        SDK diagnostics contain only safe method/status/request metadata, not
+        URLs, headers, response bodies or exception text. Non-success provider
+        details remain available explicitly on ``HTTPError.response_data``.
 
         Args:
             url: The URL to request.
@@ -458,8 +481,13 @@ class ExecutionContext:
             RateLimitError: On HTTP 429 with the ``Retry-After`` value.
             HTTPError: On any other non-2xx status.
         """
-        if not self._session:
-            self._session = aiohttp.ClientSession()
+        await self._ensure_session()
+        original_url, original_params = url, params
+        original_data, original_json, original_content_type = data, json, content_type
+        request_id = uuid4().hex
+        safe_method = method.upper() if method.upper() in {
+            "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT"
+        } else "CUSTOM"
 
         # Prepare request
         if json is not None:
@@ -516,7 +544,14 @@ class ExecutionContext:
                 content_type = response.headers.get("Content-Type", "")
 
                 if response.status == 429:  # Rate limit
-                    retry_after = int(response.headers.get("Retry-After", 60))
+                    try:
+                        retry_after = int(response.headers.get("Retry-After", 60))
+                        if not 0 <= retry_after <= 86400:
+                            retry_after = 60
+                    except (ValueError, TypeError, OverflowError):
+                        # A malformed provider header must not turn into an
+                        # exception message containing that untrusted value.
+                        retry_after = 60
                     raise RateLimitError(
                         retry_after,
                         response.status,
@@ -532,17 +567,19 @@ class ExecutionContext:
                         result = await response.text()
                         if not result and response.status in {200, 201, 204}:
                             result = None
-                except Exception as e:
-                    self.logger.error(f"Error parsing response: {e}")
+                except Exception:
+                    self.logger.warning(
+                        "Response parsing failed: method=%s status=%s request_id=%s",
+                        safe_method, response.status, request_id,
+                    )
                     result = await response.text()
 
                 response_headers = dict(response.headers)
 
                 if not response.ok:
-                    print(f"HTTP error encountered. Status: {response.status}. Result: {result}")
                     raise HTTPError(
                         response.status,
-                        str(result),
+                        "Request failed",
                         result,
                         headers=response_headers,
                     )
@@ -553,25 +590,34 @@ class ExecutionContext:
                     data=result,
                 )
 
-        except RateLimitError:
+        except HTTPError as exc:
+            self.logger.warning(
+                "HTTP request failed: method=%s status=%s request_id=%s",
+                safe_method, exc.status, request_id,
+            )
             raise
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            # Don't want to send this to Raygun here because this will be retried.
-            print(f"Error encountered: {e}. Retry count: {retry_count}. Backing off.")
+        except (aiohttp.ClientError, asyncio.TimeoutError):
             if retry_count < self.config["max_retries"]:
+                self.logger.warning(
+                    "Transport failure; retrying: method=%s attempt=%s request_id=%s",
+                    safe_method, retry_count + 1, request_id,
+                )
                 await asyncio.sleep(2 ** retry_count)  # Exponential backoff
-                print("Retrying request...")
-                # Use original_timeout (numeric) for recursive calls
+                # Retain unencoded request inputs; do not append query parameters
+                # again or re-serialize an already encoded JSON/form body.
                 return await self.fetch(
-                    url, method, params, data, json,
-                    headers, content_type, original_timeout, retry_count + 1
+                    original_url, method, original_params, original_data, original_json,
+                    headers, original_content_type, original_timeout, retry_count + 1
                 )
             else:
-                print("Max retries reached. Raising error.")
+                self.logger.warning(
+                    "Transport retry limit reached: method=%s request_id=%s", safe_method, request_id,
+                )
                 raise
-        except Exception as e:
-            self.logger.error(f"Unexpected error during {method} {url}: {e}")
-            print(f"Unexpected error encountered: {e}")
+        except Exception:
+            self.logger.error(
+                "Unexpected request failure: method=%s request_id=%s", safe_method, request_id,
+            )
             raise
 
 

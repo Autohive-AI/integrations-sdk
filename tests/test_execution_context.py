@@ -1,6 +1,8 @@
 """Tests for ExecutionContext — HTTP fetching, auth injection, retries."""
 
-from unittest.mock import patch
+import asyncio
+from urllib.parse import parse_qs, urlsplit
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
@@ -130,10 +132,84 @@ async def test_fetch_http_error_headers_not_in_message(mock_aio):
 
     err = exc_info.value
     assert err.headers["X-Debug-Token"] == secret
-    assert str(err) == "HTTP 400: bad request"
+    assert str(err) == "HTTP 400: Request failed"
     assert secret not in str(err)
     assert secret not in repr(err)
     assert secret not in err.message
+
+
+@pytest.mark.parametrize("status", [400, 429, 503])
+@pytest.mark.parametrize("content_type,body", [
+    ("application/json", '{"error":"PRIVATE_BODY_SENTINEL"}'),
+    ("text/plain", "PRIVATE_BODY_SENTINEL"),
+    ("application/json", "PRIVATE_BODY_SENTINEL malformed-json"),
+])
+async def test_fetch_error_diagnostics_do_not_expose_provider_data(mock_aio, capsys, caplog, status, content_type, body):
+    sentinel = "PRIVATE_BODY_SENTINEL"
+    private_url = f"{BASE_URL}/{sentinel}?credential={sentinel}"
+    mock_aio.get(private_url, status=status, body=body, content_type=content_type,
+                 headers={"Retry-After": "2", "X-Private-Header": sentinel})
+    async with ExecutionContext() as ctx:
+        with pytest.raises(HTTPError) as exc_info:
+            await ctx.fetch(private_url)
+    err = exc_info.value
+    assert sentinel in str(err.response_data)
+    assert err.headers["X-Private-Header"] == sentinel
+    assert sentinel not in str(err)
+    assert sentinel not in repr(err)
+    assert sentinel not in err.message
+    captured = capsys.readouterr()
+    assert sentinel not in captured.out + captured.err + caplog.text
+    assert "method=GET" in caplog.text
+    assert f"status={status}" in caplog.text
+    assert "request_id=" in caplog.text
+
+
+@pytest.mark.parametrize("error", [aiohttp.ClientError("PRIVATE_EXCEPTION_SENTINEL"), asyncio.TimeoutError(),
+                                    RuntimeError("PRIVATE_EXCEPTION_SENTINEL")])
+async def test_fetch_exception_logs_do_not_include_error_or_url(mock_aio, capsys, caplog, error):
+    sentinel = "PRIVATE_EXCEPTION_SENTINEL"
+    private_url = f"{BASE_URL}/{sentinel}?token={sentinel}"
+    mock_aio.get(private_url, exception=error)
+    async with ExecutionContext(request_config={"max_retries": 0, "timeout": 1}) as ctx:
+        with pytest.raises(type(error)):
+            await ctx.fetch(private_url)
+    captured = capsys.readouterr()
+    assert sentinel not in captured.out + captured.err + caplog.text
+
+
+async def test_fetch_sdk_retry_preserves_query_and_body_without_logging_exception(mock_aio, capsys, caplog):
+    sentinel = "PRIVATE_RETRY_SENTINEL"
+    url = f"{BASE_URL}?existing=1"
+    params = {"$filter": "name eq 'A''+B'"}
+    encoded_url = str(URL(url).with_query({"existing": "1", **params}))
+    mock_aio.post(encoded_url, exception=aiohttp.ClientConnectionError(sentinel))
+    mock_aio.post(encoded_url, payload={"ok": True})
+    async with ExecutionContext(request_config={"max_retries": 1, "timeout": 1}) as ctx:
+        with patch("asyncio.sleep") as sleep:
+            result = await ctx.fetch(url, method="POST", params=params, data={"value": sentinel},
+                                     content_type="application/json")
+    assert result.data == {"ok": True}
+    sleep.assert_awaited_once_with(1)
+    assert len(mock_aio.requests) == 1
+    key, calls = next(iter(mock_aio.requests.items()))
+    assert len(calls) == 2
+    assert calls[0].kwargs["data"] == calls[1].kwargs["data"]
+    assert parse_qs(urlsplit(str(key[1])).query)["$filter"] == ["name eq 'A''+B'"]
+    captured = capsys.readouterr()
+    assert sentinel not in captured.out + captured.err + caplog.text
+
+
+async def test_session_creation_fails_closed_without_replay_control():
+    session = MagicMock(spec=["close"])
+    session.close = AsyncMock()
+    with patch("autohive_integrations_sdk.integration.aiohttp.ClientSession", return_value=session):
+        context = ExecutionContext()
+        from autohive_integrations_sdk.integration import ConfigurationError
+        with pytest.raises(ConfigurationError, match="automatic replay cannot be disabled"):
+            await context.__aenter__()
+    session.close.assert_awaited_once()
+    assert context._session is None
 
 
 async def test_fetch_rate_limit_preserves_headers(mock_aio):
@@ -155,6 +231,39 @@ async def test_fetch_rate_limit_preserves_headers(mock_aio):
     assert err.headers["Retry-After"] == "15"
     assert err.headers["X-RateLimit-Reset"] == "1700000000"
     assert str(err) == "HTTP 429: Rate limit exceeded"
+
+
+@pytest.mark.parametrize("header", ["PRIVATE_RETRY_HEADER_SENTINEL", "-1", "999999999999999999999999", "NaN",
+                                    "Wed, 21 Oct 2026 07:28:00 GMT"])
+async def test_fetch_malformed_retry_after_is_safe(mock_aio, capsys, caplog, header):
+    mock_aio.get(BASE_URL, status=429, body="PRIVATE_BODY_SENTINEL", headers={"Retry-After": header})
+    async with ExecutionContext() as ctx:
+        with pytest.raises(RateLimitError) as exc_info:
+            await ctx.fetch(BASE_URL)
+    assert exc_info.value.retry_after == 60
+    assert exc_info.value.headers["Retry-After"] == header
+    assert "PRIVATE" not in str(exc_info.value)
+    captured = capsys.readouterr()
+    assert "PRIVATE" not in captured.out + captured.err + caplog.text
+
+
+@pytest.mark.parametrize("header,expected", [("0", 0), ("86400", 86400), ("86401", 60), ("2147483647", 60)])
+async def test_fetch_retry_after_has_operational_bound(mock_aio, capsys, caplog, header, expected):
+    mock_aio.get(
+        BASE_URL, status=429, body="PRIVATE_RATE_LIMIT_BODY",
+        headers={"Retry-After": header, "X-Private-Header": "PRIVATE_RATE_LIMIT_HEADER"},
+    )
+    async with ExecutionContext() as ctx:
+        with pytest.raises(RateLimitError) as exc_info:
+            await ctx.fetch(BASE_URL)
+    error = exc_info.value
+    assert error.retry_after == expected
+    assert error.headers["Retry-After"] == header
+    assert error.headers["X-Private-Header"] == "PRIVATE_RATE_LIMIT_HEADER"
+    assert error.response_data == "PRIVATE_RATE_LIMIT_BODY"
+    assert "PRIVATE" not in str(error)
+    captured = capsys.readouterr()
+    assert "PRIVATE" not in captured.out + captured.err + caplog.text
 
 
 # ── Auth injection ───────────────────────────────────────────────────────────

@@ -33,7 +33,7 @@ This integration uses custom authentication with the following fields:
 ## Requirements
 
 - Python 3.13+
-- `autohive-integrations-sdk~=1.0.2`
+- `autohive-integrations-sdk~=2.1.1`
 
 ## Testing
 

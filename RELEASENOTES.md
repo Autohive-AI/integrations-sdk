@@ -1,5 +1,45 @@
 # Release Notes
 
+## 2.1.1
+
+### Security and reliability fixes
+
+- `ExecutionContext.fetch()` no longer emits provider error bodies, raw URLs,
+  response headers, or exception text in its HTTP, parsing, transport-retry,
+  or unexpected-error diagnostics. Logs retain method, status where available,
+  and a locally generated request identifier. SDK-generated `HTTPError`
+  messages are now generic (`HTTP <status>: Request failed`); use
+  `response_data` to inspect provider details explicitly rather than parsing
+  exception text, and never log or return those details wholesale. Explicit
+  `HTTPError(...)` constructor messages remain caller-controlled and unchanged.
+- Response headers from 2.1.0 remain available on `HTTPError` and
+  `RateLimitError`. Integer `Retry-After` delays from 0 through 86,400 seconds
+  (24 hours) are accepted, inclusive. Missing, malformed, negative or larger
+  values fall back to the existing 60-second rate-limit default without
+  exposing the provider header in a parsing exception. The original header
+  remains available explicitly on `headers`.
+- SDK network retries preserve the original URL, parameters and body, avoiding
+  duplicate query options and repeated JSON/form serialization.
+- SDK-created aiohttp sessions disable aiohttp's implicit connection replay.
+  The SDK retry policy is now authoritative: `max_retries=0`, or starting
+  `retry_count` at the configured maximum, also prevents a hidden DELETE
+  replay after a server accepted a deletion but disconnected before replying.
+  A transport exception still means the write outcome is uncertain; check
+  the provider before retrying. SDK defaults still permit network retries;
+  write actions must deliberately opt out when replay is inappropriate.
+- The supported transport range is `aiohttp>=3.11,<4`. aiohttp currently has no
+  public replay-control option, so the SDK isolates its per-session private
+  `_retry_connection` compatibility dependency and fails closed if that
+  control is unavailable. Real loopback tests cover connection reuse,
+  accepted DELETE disconnects and SDK-controlled GET backoff.
+
+### Adoption
+
+Use `autohive-integrations-sdk~=2.1.1` for the patched supported 2.x baseline.
+`~=2.0.1` does not select 2.1.x. The integration's encode-once workaround remains
+valid and can be retained as a defense while consumers adopt the SDK fix.
+Regenerate and validate deployment packages after dependency changes.
+
 ## 2.1.0
 
 ### New Feature

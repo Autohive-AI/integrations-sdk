@@ -7,7 +7,7 @@ description: "Writes pytest unit tests for an Autohive integration using the moc
 
 ## Prerequisites
 
-- The integration must be on **SDK 2.0.0** (`autohive-integrations-sdk~=2.0.0` in `requirements.txt`)
+- The integration must use the supported **SDK 2.1.1+ 2.x baseline** (`autohive-integrations-sdk~=2.1.1` in `requirements.txt`)
 - If the integration is still on SDK 1.x, upgrade it first using the `upgrading-sdk-v2` skill
 
 ## File Structure

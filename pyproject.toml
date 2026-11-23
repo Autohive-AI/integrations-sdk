@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autohive_integrations_sdk"
-version = "2.1.0"
+version = "2.1.1"
 authors = [
   { name="Reilly Oldham", email="reilly@autohive.com" },
   { name="Kai Koenig", email="kai@autohive.com" },
@@ -25,7 +25,7 @@ classifiers = [
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
 dependencies = [
-    "aiohttp", 
+    "aiohttp>=3.11,<4",
     "jsonschema==4.17.3"
 ]
 

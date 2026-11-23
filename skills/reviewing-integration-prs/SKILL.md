@@ -150,7 +150,7 @@ Missing `.env.example` entries are blockers when the PR adds or changes integrat
 
 If the PR upgrades an integration to SDK 2.x or changes fetch handling, apply `upgrading-sdk-v2`:
 
-- `requirements.txt` pins `autohive-integrations-sdk~=2.0.0`.
+- `requirements.txt` pins `autohive-integrations-sdk~=2.1.1`.
 - `context.fetch()` results access `.data` for response body.
 - Unit/integration test fetch mocks return `FetchResponse`.
 - Error paths return `ActionError(message=...)` instead of success-shaped error data.

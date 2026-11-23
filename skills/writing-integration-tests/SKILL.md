@@ -19,7 +19,7 @@ If a variable is read by the test file, either add a blank template entry to roo
 
 ## Prerequisites
 
-- The integration must be on **SDK 2.0.0** (`autohive-integrations-sdk~=2.0.0` in `requirements.txt`)
+- The integration must use the supported **SDK 2.1.1+ 2.x baseline** (`autohive-integrations-sdk~=2.1.1` in `requirements.txt`)
 - If the integration is still on SDK 1.x, upgrade it first using the `upgrading-sdk-v2` skill
 - `aiohttp` must be available in the test environment (used by the `live_context` fixture)
 - A valid API key or OAuth token for the target service

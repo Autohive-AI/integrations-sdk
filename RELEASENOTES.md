@@ -13,9 +13,11 @@
   exception text, and never log or return those details wholesale. Explicit
   `HTTPError(...)` constructor messages remain caller-controlled and unchanged.
 - Response headers from 2.1.0 remain available on `HTTPError` and
-  `RateLimitError`. Malformed, negative or excessively large `Retry-After`
+  `RateLimitError`. Integer `Retry-After` delays from 0 through 86,400 seconds
+  (24 hours) are accepted, inclusive. Missing, malformed, negative or larger
   values fall back to the existing 60-second rate-limit default without
-  exposing the provider header in a parsing exception.
+  exposing the provider header in a parsing exception. The original header
+  remains available explicitly on `headers`.
 - SDK network retries preserve the original URL, parameters and body, avoiding
   duplicate query options and repeated JSON/form serialization.
 - SDK-created aiohttp sessions disable aiohttp's implicit connection replay.

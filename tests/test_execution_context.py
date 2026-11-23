@@ -247,6 +247,25 @@ async def test_fetch_malformed_retry_after_is_safe(mock_aio, capsys, caplog, hea
     assert "PRIVATE" not in captured.out + captured.err + caplog.text
 
 
+@pytest.mark.parametrize("header,expected", [("0", 0), ("86400", 86400), ("86401", 60), ("2147483647", 60)])
+async def test_fetch_retry_after_has_operational_bound(mock_aio, capsys, caplog, header, expected):
+    mock_aio.get(
+        BASE_URL, status=429, body="PRIVATE_RATE_LIMIT_BODY",
+        headers={"Retry-After": header, "X-Private-Header": "PRIVATE_RATE_LIMIT_HEADER"},
+    )
+    async with ExecutionContext() as ctx:
+        with pytest.raises(RateLimitError) as exc_info:
+            await ctx.fetch(BASE_URL)
+    error = exc_info.value
+    assert error.retry_after == expected
+    assert error.headers["Retry-After"] == header
+    assert error.headers["X-Private-Header"] == "PRIVATE_RATE_LIMIT_HEADER"
+    assert error.response_data == "PRIVATE_RATE_LIMIT_BODY"
+    assert "PRIVATE" not in str(error)
+    captured = capsys.readouterr()
+    assert "PRIVATE" not in captured.out + captured.err + caplog.text
+
+
 # ── Auth injection ───────────────────────────────────────────────────────────
 
 

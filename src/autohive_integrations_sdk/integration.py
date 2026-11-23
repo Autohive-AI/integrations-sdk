@@ -145,7 +145,10 @@ class RateLimitError(HTTPError):
 
     Attributes:
         retry_after: Seconds to wait before retrying, taken from the
-            ``Retry-After`` response header (defaults to 60 if absent).
+            ``Retry-After`` response header. ``fetch()`` accepts integer delays
+            from 0 through 86,400 seconds (24 hours), inclusive; missing,
+            malformed or out-of-range values default to 60 seconds. The raw
+            header remains available on ``headers`` for explicit inspection.
     """
     def __init__(self, retry_after: int, *args, **kwargs):
         self.retry_after = retry_after
@@ -543,7 +546,7 @@ class ExecutionContext:
                 if response.status == 429:  # Rate limit
                     try:
                         retry_after = int(response.headers.get("Retry-After", 60))
-                        if not 0 <= retry_after <= 2147483647:
+                        if not 0 <= retry_after <= 86400:
                             retry_after = 60
                     except (ValueError, TypeError, OverflowError):
                         # A malformed provider header must not turn into an

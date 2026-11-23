@@ -395,7 +395,7 @@ class ExecutionContext:
     """
     def __init__(
         self,
-        auth: Dict[str, Any] = {},
+        auth: Dict[str, Any] = {}, 
         request_config: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         logger: Optional[logging.Logger] = None
@@ -495,11 +495,11 @@ class ExecutionContext:
             content_type = "application/json"
 
         final_headers = {}
-
+        
         if self.auth and "Authorization" not in (headers or {}):
             auth_type = AuthType(self.auth.get("auth_type", "PlatformOauth2"))
             credentials = self.auth.get("credentials", {})
-
+            
             if auth_type == AuthType.PlatformOauth2 and "access_token" in credentials:
                 final_headers["Authorization"] = f"Bearer {credentials['access_token']}"
 
@@ -623,13 +623,13 @@ class ExecutionContext:
 
 class Integration:
     """Base integration class with handler registration and execution.
-
+    
     This class manages the integration configuration, handler registration,
     and provides methods to execute actions and triggers.
-
+    
     Args:
         config: Integration configuration
-
+        
     Attributes:
         config: Integration configuration
     """
@@ -664,7 +664,7 @@ class Integration:
         """
         if config_path is None:
             config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.json')
-
+        
         config_path = Path(config_path)
 
         if not config_path.exists():
@@ -675,7 +675,7 @@ class Integration:
                 config_data = json.load(f)
         except json.JSONDecodeError as e:
             raise ConfigurationError(f"Invalid JSON configuration: {e}")
-
+        
         # Parse configuration sections
         actions = cls._parse_actions(config_data.get("actions", {}))
         polling_triggers = cls._parse_polling_triggers(config_data.get("polling_triggers", {}))
@@ -741,16 +741,16 @@ class Integration:
 
     def action(self, name: str):
         """Decorator to register an action handler.
-
+        
         Args:
             name: Name of the action to register
-
+            
         Returns:
             Decorator function
-
+            
         Raises:
             ConfigurationError: If action is not defined in config
-
+            
         Example:
             ```python
             @integration.action("my_action")
@@ -769,13 +769,13 @@ class Integration:
 
     def polling_trigger(self, name: str):
         """Decorator to register a polling trigger handler
-
+        
         Args:
             name: Name of the polling trigger to register
-
+            
         Returns:
             Decorator function
-
+        
         Raises:
             ConfigurationError: If polling trigger is not defined in config
 
@@ -797,7 +797,7 @@ class Integration:
 
     def connected_account(self):
         """Decorator to register a connected account handler
-
+        
         Returns:
             Decorator function
 
@@ -951,16 +951,16 @@ class Integration:
                                     last_poll_ts: Optional[str],
                                     context: ExecutionContext) -> List[Dict[str, Any]]:
         """Execute a registered polling trigger
-
+        
         Args:
             name: Name of the polling trigger to execute
             inputs: Trigger inputs
             last_poll_ts: Last poll timestamp
             context: Execution context
-
+            
         Returns:
             List of records
-
+            
         Raises:
             ValidationError: If inputs or outputs don't match schema
         """
@@ -993,7 +993,7 @@ class Integration:
                 validate(record["data"], trigger_config.output_schema)
             except Exception as e:
                 raise ValidationError(e.message, e.schema, e.instance)
-
+            
         return records
 
     async def get_connected_account(self, context: ExecutionContext) -> IntegrationResult:

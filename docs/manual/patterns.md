@@ -312,3 +312,22 @@ CI runs [bandit](https://bandit.readthedocs.io/) for security checks. It skips r
 ### Dependency Auditing
 
 CI runs `pip-audit` against your `requirements.txt` to check for known CVEs. If a dependency has a vulnerability, update to the fixed version listed in the audit output.
+
+## HTTP failure handling and retries
+
+Use the patched supported 2.x baseline (`autohive-integrations-sdk~=2.1.1`).
+Errors raised by SDK `fetch()` have generic messages. Provider bodies and
+headers remain available through `HTTPError.response_data` and `.headers`
+for deliberate inspection; return only the specific safe fields a workflow
+needs. Never log or return an entire error body/header dictionary, and match
+header names case-insensitively. Manually constructed `HTTPError` messages
+remain the caller's responsibility.
+
+SDK diagnostics omit raw URLs, bodies, headers and exception text. Network
+retries reuse the original query/body, and SDK-created aiohttp sessions disable
+implicit connection replay. The default SDK network retry limit is still
+three: for a write whose response may be lost after acceptance, call `fetch`
+with `retry_count=context.config["max_retries"]` to prevent automatic retries.
+Catch expected transport exceptions and explain that the outcome is uncertain;
+inspect the provider before attempting the write again. Do not translate an
+uncertain result into success or assume the write did not occur.

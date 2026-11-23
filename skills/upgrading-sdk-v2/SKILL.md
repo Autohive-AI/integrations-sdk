@@ -111,7 +111,7 @@ Change the SDK pin:
 autohive-integrations-sdk~=1.0.2
 
 # After
-autohive-integrations-sdk~=2.0.0
+autohive-integrations-sdk~=2.1.1
 ```
 
 Keep all other dependencies unchanged.
@@ -259,7 +259,7 @@ Before considering an integration upgraded, verify:
 - [ ] All error paths return `ActionError(message=...)` instead of `ActionResult` with error data
 - [ ] `ActionError` is imported from the SDK
 - [ ] `"error"` and error-only `"result"` properties removed from output schemas in `config.json`
-- [ ] `requirements.txt` pins `autohive-integrations-sdk~=2.0.0`
+- [ ] `requirements.txt` pins `autohive-integrations-sdk~=2.1.1`
 - [ ] `config.json` version is bumped to `2.0.0` (upgrades only — new integrations stay at `1.0.0`)
 - [ ] Unit test mocks wrap return values in `FetchResponse(...)`
 - [ ] Unit test error assertions use `result.type == ResultType.ACTION_ERROR` and `result.result.message`

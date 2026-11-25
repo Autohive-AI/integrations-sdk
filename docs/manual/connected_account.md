@@ -65,26 +65,25 @@ The SDK provides a `ConnectedAccountInfo` dataclass for returning user informati
 ```python
 from autohive_integrations_sdk import ConnectedAccountInfo
 
-@dataclass
-class ConnectedAccountInfo:
-    """Information about the connected account"""
-    email: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    username: Optional[str] = None
-    user_id: Optional[str] = None
-    avatar_url: Optional[str] = None
-    organization: Optional[str] = None
+account_info = ConnectedAccountInfo(
+    email="person@example.com",
+    username="example-user",
+    user_id="user-7",
+)
 ```
+
+The fields `email`, `first_name`, `last_name`, `username`, `user_id`, `avatar_url`, and `organization` are optional strings that default to `None`. Import the SDK's model; do not redeclare it in your integration.
 
 ### Implementing Connected Account Handler
 
 Register a connected account handler using the `@integration.connected_account()` decorator:
 
 ```python
+from pathlib import Path
+
 from autohive_integrations_sdk import Integration, ConnectedAccountHandler, ConnectedAccountInfo, ExecutionContext
 
-integration = Integration.load()
+integration = Integration.load(Path(__file__).with_name("config.json"))
 
 @integration.connected_account()
 class MyConnectedAccountHandler(ConnectedAccountHandler):
@@ -103,7 +102,7 @@ class MyConnectedAccountHandler(ConnectedAccountHandler):
         """
         # Fetch user info from the API
         # For platform OAuth, context.fetch() auto-injects the Authorization header.
-        # For custom auth, pass headers manually using context.auth.get("credentials", {}).get("api_key")
+        # For custom auth, pass headers manually using context.auth["credentials"].get("api_key")
         response = await context.fetch(
             "https://api.example.com/user",
             method="GET"
@@ -130,9 +129,11 @@ class MyConnectedAccountHandler(ConnectedAccountHandler):
 Here's a complete example for a GitHub integration:
 
 ```python
+from pathlib import Path
+
 from autohive_integrations_sdk import Integration, ConnectedAccountHandler, ConnectedAccountInfo, ExecutionContext
 
-integration = Integration.load()
+integration = Integration.load(Path(__file__).with_name("config.json"))
 
 @integration.connected_account()
 class GithubConnectedAccountHandler(ConnectedAccountHandler):
@@ -166,9 +167,11 @@ class GithubConnectedAccountHandler(ConnectedAccountHandler):
 For OAuth integrations with different API structures:
 
 ```python
+from pathlib import Path
+
 from autohive_integrations_sdk import Integration, ConnectedAccountHandler, ConnectedAccountInfo, ExecutionContext
 
-integration = Integration.load()
+integration = Integration.load(Path(__file__).with_name("config.json"))
 
 @integration.connected_account()
 class LinkedInConnectedAccountHandler(ConnectedAccountHandler):
@@ -222,12 +225,9 @@ The information is cached in the database and not fetched on every page load, en
 
 ## Error Handling
 
-If the connected account handler raises an exception or returns `None`, the system will:
-- Log a warning
-- Not cache any account information
-- Fall back to showing basic connection status without account details
+`Integration.get_connected_account(context)` requires a registered handler and valid configured auth. The handler must return the SDK's `ConnectedAccountInfo`, which is wrapped in an `IntegrationResult` with `type == ResultType.CONNECTED_ACCOUNT`.
 
-This is best-effort caching - failures won't prevent the integration from working.
+Missing registration, invalid auth, or a return value such as `None` raises `ValidationError`. Exceptions raised by the handler propagate; unlike `execute_action`, this method does not turn validation failures into `VALIDATION_ERROR` results. Platform logging, caching, and fallback behavior belong to the host application, not the SDK contract.
 
 ## Troubleshooting
 

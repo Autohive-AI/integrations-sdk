@@ -32,7 +32,7 @@ Before starting, the following repos must exist as siblings:
 parent-dir/
 ├── integrations/                      ← private (source)
 ├── autohive-integrations/              ← public (destination)
-├── autohive-integrations-tooling/      ← validation scripts
+├── autohive-integrations-tooling/      ← HiveUp build source
 └── integrations-sdk/                   ← skill + docs
 ```
 
@@ -41,14 +41,15 @@ Check:
 ```bash
 ls ../integrations/<name>            # the integration to migrate
 ls ../autohive-integrations          # the public repo
-ls ../autohive-integrations-tooling/scripts/validate_integration.py
+hiveup --version
 ```
 
-Activate the public repo's venv (or create one — see [building-integration](../building-integration/SKILL.md) for setup):
+Install the Python HiveUp CLI with Python 3.13+ using the [local-build installation instructions](https://github.com/Autohive-AI/autohive-integrations-tooling#install-hiveup-from-a-local-build). HiveUp is **not published to PyPI**. The installed CLI prepares isolated dependency environments; it does not require a shared integration venv or direct calls to Tooling scripts.
+
+Run destination checks from the public repository root:
 
 ```bash
 cd ../autohive-integrations
-source .venv/bin/activate
 ```
 
 ## Step 1 — Security / safety / secrets review (MANDATORY)
@@ -143,7 +144,7 @@ cp ../integrations/<name>/tests/test_*.py      ../autohive-integrations/<name>/t
 ### Adaptations to make
 
 - **`__init__.py`** → empty file (matches public repo convention).
-- **`requirements.txt`** → keep the SDK version pin from the source as-is (the migration is a *move*, not an *upgrade*; bumping the SDK is a separate PR using the [upgrading-sdk-v2](../upgrading-sdk-v2/SKILL.md) skill).
+- **`requirements.txt` and runtime behavior** → preserve the source dependency pins, auth contract, fetch handling, and error behavior. A migration is a *move*, not an *upgrade*. The recommended `~=2.1.0` pin applies to new integrations and explicit upgrades, not this move; use the [upgrading-sdk-v2](../upgrading-sdk-v2/SKILL.md) skill in a separate PR.
 - **`README.md`** → **rewrite** in the public repo style. Model it on a recent public README such as [`google-calendar/README.md`](https://github.com/Autohive-AI/autohive-integrations/blob/master/google-calendar/README.md). Sections:
   - `# <Name> Integration for Autohive`
   - `## Description` (what it does, key features)
@@ -162,26 +163,25 @@ cp ../integrations/<name>/tests/test_*.py      ../autohive-integrations/<name>/t
 
 ## Step 4 — Local validation
 
-From the public repo root, with the venv activated:
+From the public repo root, replace `<base-ref>` with the fetched target ref of the public PR (do not assume `main` or `master`):
 
 ```bash
-python ../autohive-integrations-tooling/scripts/validate_integration.py <name>
-python ../autohive-integrations-tooling/scripts/check_code.py <name>
-pytest <name>/ -v
+hiveup validate --base-ref <base-ref> <name>
+hiveup test <name>
 ```
 
 Required outcome:
 
-- `validate_integration.py` → `0` exit code (warnings about deprecated SDK pin are OK for a pure migration).
-- `check_code.py` → `✅ CODE CHECK PASSED`.
-- `pytest` → no failures (placeholder tests are fine; new tests are out of scope for a migration).
+- `hiveup validate` → `0` exit code with all failures resolved. Warnings about an SDK lower bound below 2.1.0 are acceptable for a pure migration; do not change the pin just to remove them.
+- Unit tests → no failures. `validate` already includes them; `hiveup test` is the focused rerun. Inspect counts rather than treating a skipped test check as coverage.
+- With a base ref, the destination is a new integration: missing canonical unit tests or config/input drift can fail even when the source was accepted as legacy. If fixing a failure requires behavior or SDK changes, report the blocker and agree on a separate fix or explicit scope change; do not silently upgrade the move.
 - If migrated tests reference env vars, root `.env.example` includes all of them as blank template entries.
 
-If anything fails, fix with:
+Apply supported lint and formatting fixes, then rerun validation:
 
 ```bash
-ruff check --fix --config ../autohive-integrations-tooling/ruff.toml <name>
-ruff format --config ../autohive-integrations-tooling/ruff.toml <name>
+hiveup validate --only lint,format --fix <name>
+hiveup validate --base-ref <base-ref> <name>
 ```
 
 See the [building-integration](../building-integration/SKILL.md) skill for the full validation playbook.
@@ -222,7 +222,7 @@ Open one GitHub issue and one branch per repo. Cross-reference the PRs in each P
 
 - A copy of the security/safety/secrets review table from Step 1.
 - Links to the companion PRs in the other repos.
-- The exact local validation output (validate + check_code).
+- The exact HiveUp commands and local validation output, including warnings and test counts.
 - `Closes #<issue>` for the matching issue in that repo.
 
 ### Merge order
@@ -257,8 +257,8 @@ After all PRs merge:
 | Failure | Fix |
 |---|---|
 | Secret scan finds a `# nosec` test token like `"your_access_token_here"` | Fine — these are placeholders, no action needed. |
-| `validate_integration.py` warns about deprecated SDK | Acceptable for an as-is migration. Open a follow-up issue to upgrade with [upgrading-sdk-v2](../upgrading-sdk-v2/SKILL.md). |
-| `check_code.py` reports config-code sync warnings | These are warnings (⚠️), not failures (❌). Fine to leave for a migration; the integration was already running in production with these. |
+| HiveUp `structure` warns about an SDK lower bound below 2.1.0 | Acceptable for an as-is migration. Track an SDK upgrade separately. |
+| HiveUp `sync` warns or fails | Distinguish warnings from failures. The destination may be new relative to the base ref, so legacy input drift may fail. Report behavior-changing fixes separately instead of assuming all sync issues are non-blocking. |
 | Icon `file` reports embedded EXIF | Strip with `convert icon.png -strip icon.png` (ImageMagick) and re-commit. |
 | README mentions internal Slack channel / employee | Rewrite the section before copying. |
 | You discover a trade secret mid-migration | Stop. Close the public PR. Discuss in Slack. |

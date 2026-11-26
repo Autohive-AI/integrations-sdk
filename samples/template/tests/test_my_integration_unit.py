@@ -36,3 +36,4 @@ async def test_missing_credentials(mock_context):
 
     assert result.type == ResultType.VALIDATION_ERROR
     assert result.result["source"] == "auth"
+    mock_context.fetch.assert_not_awaited()

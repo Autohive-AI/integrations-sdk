@@ -3,211 +3,90 @@ name: building-integration
 description: "Runs the local build and validation pipeline for an Autohive integration — structure validation, code quality checks, linting, formatting, security scanning, and unit tests. Use when asked to build, validate, check, or verify an integration before pushing."
 ---
 
-# Building & Validating an Integration Locally
+# Build and validate an integration locally
 
-Run the same checks CI runs, locally, before pushing.
+Use the installed Python HiveUp CLI, not the legacy .NET CLI or Tooling scripts. For new integrations and explicit SDK upgrades, recommend `autohive-integrations-sdk~=2.1.0`. Keep existing dependency pins and runtime behavior unchanged during a pure private-to-public migration.
 
-## Preflight Checks
+## Prerequisites
 
-Run these checks **before** starting the build pipeline. Fix any that fail.
+- Install HiveUp with Python 3.13+ using the [local-build installation instructions](https://github.com/Autohive-AI/autohive-integrations-tooling#install-hiveup-from-a-local-build). HiveUp is **not published to PyPI**; do not use `pip install hiveup` or `uv tool install hiveup` as an index install.
+- Verify the installed command with `hiveup --version`.
+- Read the integration repository's guidance and testing configuration.
+- For PR checks, identify the actual PR base ref and make sure it resolves locally. Do not assume `main` or `master`.
 
-### 1. Tooling repo
+HiveUp installs integration dependencies in isolated environments from each integration's `requirements.txt`. You do not need to install all integrations into one shared virtual environment. A Tooling checkout is needed to build HiveUp, not to invoke its installed validation commands.
 
-The tooling repo must be cloned alongside the integrations repo:
+## Validation workflow
 
-```
-parent-dir/
-├── autohive-integrations/          ← you are here
-└── autohive-integrations-tooling/  ← must exist
-```
+Run these commands from the integrations repository root. Replace `<name>` with the integration directory, such as `clickup`, and `<base-ref>` with the fetched PR base ref, such as `origin/main` if that is the PR target.
 
-Check: `ls ../autohive-integrations-tooling/scripts/validate_integration.py`
-
-If missing, clone it:
+### 1. Check structure
 
 ```bash
-git clone https://github.com/autohive-ai/autohive-integrations-tooling.git ../autohive-integrations-tooling
+hiveup check structure --base-ref <base-ref> <name>
 ```
 
-### 2. Python 3.13+
+This checks required files, schemas, auth configuration, SDK pinning, test structure, and the 512×512 PNG/JPG/JPEG icon. SDK lower bounds below 2.1.0 warn without rewriting the pin or failing solely for that advisory. A missing canonical `test_*_unit.py` warns for an existing integration but fails for a new one when the base ref is supplied.
 
-Check: `python3 --version` (must be 3.13+)
-
-If not available, install with uv:
+### 2. Run the full profile
 
 ```bash
-uv python install 3.13
+hiveup validate --base-ref <base-ref> <name>
 ```
 
-Or use your system package manager / pyenv.
+The available checks are `structure`, `syntax`, `imports`, `json`, `lint`, `format`, `security`, `audit`, `sync`, `fetch`, `tests`, `readme`, and `version`. The default runs all of them, including unit tests. `readme` and `version` skip without a base ref; config/input drift fails for new integrations with a base ref but warns for existing ones. Action mismatches fail in either case.
 
-### 3. Virtual environment
-
-Check: `ls .venv/bin/python`
-
-If missing, create it:
+To validate all changed integrations instead of naming them:
 
 ```bash
-uv venv --python 3.13 .venv
+hiveup validate --changed --base-ref <base-ref>
 ```
 
-Or without uv:
+`hiveup ci --base-ref <base-ref>` selects changed integrations and runs the same checks grouped for CI. Neither command runs live integration tests.
+
+### 3. Iterate with focused checks
 
 ```bash
-python3.13 -m venv .venv
+hiveup test <name>
+hiveup check sync --base-ref <base-ref> <name>
+hiveup check fetch <name>
 ```
 
-Always activate before running any commands:
+`hiveup test` runs `tests/test_*_unit.py` with isolated dependencies and coverage. It warns and skips integrations without canonical unit-test files; a successful exit is not proof that tests ran. Inspect the test counts.
 
-```bash
-source .venv/bin/activate
-```
-
-### 4. Package installer
-
-Check: `which uv` or `which pip`
-
-uv is preferred. If neither is available, install uv:
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-### 5. Test dependencies
-
-Check: `python -c "import pytest"` (from within the activated venv)
-
-If missing, install:
-
-```bash
-uv pip install -r requirements-test.txt
-```
-
-Or with pip:
-
-```bash
-pip install -r requirements-test.txt
-```
-
-### 6. Ruff
-
-Check: `ruff --version` (from within the activated venv)
-
-If missing, install:
-
-```bash
-uv pip install ruff
-```
-
-Note: `check_code.py` auto-installs ruff when it runs, but you need it locally for the manual auto-fix commands in Step 5.
-
-## Build Pipeline
-
-Run these steps in order from the integrations repo root. Replace `<name>` with the integration folder name (e.g., `clickup`).
-
-### Step 1 — Install integration dependencies
-
-```bash
-source .venv/bin/activate
-uv pip install -r <name>/requirements.txt
-# Or with pip: pip install -r <name>/requirements.txt
-```
-
-### Step 2 — Structure validation
-
-```bash
-python ../autohive-integrations-tooling/scripts/validate_integration.py <name>
-```
-
-Checks: folder naming, required files (`config.json`, `requirements.txt`, `README.md`, icon, tests/`), config.json schema, auth config, action definitions, SDK version pinning, test structure.
-
-Exit codes: `0` = passed, `1` = errors found, `2` = processing error.
-
-### Step 3 — Code quality checks
-
-```bash
-python ../autohive-integrations-tooling/scripts/check_code.py <name>
-```
-
-Runs (in order): dependency install, Python syntax, import resolution, JSON validity, ruff lint, ruff format, bandit security scan, pip-audit, config-code sync, fetch pattern check.
-
-Exit codes: `0` = passed, `1` = failures found.
-
-### Step 4 — Unit tests
-
-```bash
-pytest <name>/ -v
-```
-
-Only runs tests in `test_*_unit.py` files (configured in `pyproject.toml`).
-
-### Step 5 — Verify `.env.example` for integration-test env vars
+### 4. Verify `.env.example` for integration-test env vars
 
 If the integration has `test_*_integration.py` files, check whether they reference environment variables via `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers. Every referenced variable must appear as a blank template entry in the repository root `.env.example`.
 
 This is a manual review/build requirement: `.env` stays local and uncommitted, but `.env.example` is the committed contract that tells humans, reviewers, and automation what to provide. Missing entries should be treated as a validation failure for PRs adding or changing integration tests.
 
-Use a focused cross-check:
-
-```bash
-grep -RInE 'env_credentials\(|os\.environ|getenv\(' <name>/tests/test_*_integration.py
-grep -nE 'INTEGRATION_PREFIX|SERVICE_PREFIX' .env.example
-```
+Search the live test files for `env_credentials(...)`, `os.environ`, `os.getenv(...)`, and equivalent helpers, then compare the variables with root `.env.example`.
 
 Document required credentials, optional test IDs, and destructive-test-only variables. If an env var read is unused, remove it rather than documenting unnecessary setup.
 
-### Step 6 — Auto-fix lint and formatting issues
-
-If steps 2–5 report ruff errors, auto-fix with:
+### 5. Fix lint and formatting, then revalidate
 
 ```bash
-ruff check --fix --config ../autohive-integrations-tooling/ruff.toml <name>
-ruff format --config ../autohive-integrations-tooling/ruff.toml <name>
+hiveup validate --only lint,format --fix <name>
+hiveup validate --base-ref <base-ref> <name>
 ```
 
-Then re-run steps 2–5 to confirm.
+HiveUp uses its bundled Ruff configuration, including Python 3.13 and a 120-character line length. For standalone Ruff, pass `--config ../autohive-integrations-tooling/ruff.toml` to both `ruff check` and `ruff format` when the Tooling checkout is a sibling.
 
-## Ruff Configuration
+For local work without a PR base, omit `--base-ref`; report that history-aware checks were skipped. Do not invent a base ref just to suppress a processing error.
 
-CI uses the `ruff.toml` from the tooling repo — always pass `--config ../autohive-integrations-tooling/ruff.toml` to match CI behavior.
+## Interpret results
 
-Key settings:
-- `target-version = "py313"`
-- `line-length = 120`
-- Rules: `E` (pycodestyle errors), `F` (Pyflakes), `W` (pycodestyle warnings)
-- `__init__.py`: `F401` ignored (re-exports)
-- `**/tests/context.py`: `F401`, `E402` ignored
+HiveUp exits `0` for passed, warning, or skipped results; `1` for check failures; and `2` for processing errors. Inspect warnings and skipped results even when the exit code is zero. Use `hiveup validate --json <name>` for structured output. Fix failures or document intentional exceptions, then rerun the full profile.
 
-## Workflow Summary
-
-1. Install deps → `uv pip install -r <name>/requirements.txt` (or `pip install -r <name>/requirements.txt`)
-2. Validate structure → `python ../autohive-integrations-tooling/scripts/validate_integration.py <name>`
-3. Check code → `python ../autohive-integrations-tooling/scripts/check_code.py <name>`
-4. Run tests → `pytest <name>/ -v`
-5. Verify integration-test env vars are listed in root `.env.example` (if applicable)
-6. Fix issues → `ruff check --fix ...` / `ruff format ...`
-7. Re-run until all pass
-
-## Interpreting Output
-
-### validate_integration.py
-- `❌` = Error — must fix before PR
-- `⚠️` = Warning — review but won't block CI
-- Final summary shows total errors/warnings across all integrations
-
-### check_code.py
-- Each check prints `✅` or `❌` with details
-- All checks run even if one fails (no short-circuit)
-- Final line: `✅ CODE CHECK PASSED` or `❌ CODE CHECK FAILED`
-
-### Common Failures and Fixes
+## Common failures and fixes
 
 | Failure | Fix |
 |---|---|
-| Ruff lint errors | `ruff check --fix --config ../autohive-integrations-tooling/ruff.toml <name>` |
-| Ruff format errors | `ruff format --config ../autohive-integrations-tooling/ruff.toml <name>` |
+| Ruff lint errors | `hiveup check lint --fix <name>` |
+| Ruff format errors | `hiveup check format --fix <name>` |
 | Bandit security issue | Add `# nosec B105` for test credential strings; fix real issues |
 | Config-code sync | Ensure actions in `config.json` match handlers in source code |
-| Missing test files | Create `tests/test_<name>_unit.py` (see `writing-unit-tests` skill) |
-| Import errors | Check `requirements.txt` has all dependencies; check `__init__.py` exports |
+| Missing test files | Create `tests/test_<name>_unit.py` using the [writing-unit-tests skill](../writing-unit-tests/SKILL.md); preserve scope for pure migrations |
+| Import errors | Check `requirements.txt` has all dependencies; keep the root `__init__.py` empty |
 | Integration tests use env vars but `.env.example` missing entries | Add blank entries for every referenced env var to root `.env.example`; treat as blocking for PRs adding/changing integration tests |

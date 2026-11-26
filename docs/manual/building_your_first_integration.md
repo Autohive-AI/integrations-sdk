@@ -2,6 +2,8 @@
 
 This guide walks you through building an Autohive integration from scratch. By the end, you'll have a working integration with configuration, action handlers, and tests.
 
+The examples target released **SDK 2.1.0**. Use an integration environment with `autohive-integrations-sdk~=2.1.0`, not an editable SDK 3.x checkout from `master`.
+
 ## Prerequisites
 
 - **Python 3.13+** — the SDK enforces this version
@@ -16,14 +18,15 @@ Every Autohive integration lives in its own directory and follows this structure
 my-integration/
 ├── config.json              # Integration metadata and action definitions
 ├── my_integration.py        # Main implementation (entry point)
-├── __init__.py              # Package init — only import and __all__
+├── __init__.py              # Empty file; no re-exports
 ├── requirements.txt         # Dependencies (must include autohive-integrations-sdk)
 ├── README.md                # Documentation
-├── icon.png or icon.svg     # Integration icon (512×512 pixels)
+├── icon.png                 # PNG or JPEG icon (512×512 pixels)
+├── pytest.ini               # Standalone only; omit in an integrations monorepo
 └── tests/
     ├── __init__.py           # Can be empty
-    ├── context.py            # Import setup
-    └── test_my_integration.py
+    ├── conftest.py           # Import setup and offline context fixture
+    └── test_my_integration_unit.py
 ```
 
 ### Naming Conventions
@@ -44,17 +47,19 @@ cd my-integration
 Create a `requirements.txt`:
 
 ```
-autohive-integrations-sdk~=2.0.0
+autohive-integrations-sdk~=2.1.0
 ```
 
-The `~=` (compatible release) operator means `>=2.0.0, <2.1.0` — you'll get patch updates with bug fixes, but won't be surprised by minor version changes that could alter SDK behaviour.
+The `~=` (compatible release) operator means `>=2.1.0, <2.2.0`: you get SDK 2.1 patch updates, but not later minor or major versions.
 
 Add any additional libraries your integration needs beyond the SDK (e.g., `feedparser` for RSS parsing, `stripe` for the Stripe client library).
 
-Install your dependencies:
+Create and activate a virtual environment, then install your dependencies:
 
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python -m pip install -r requirements.txt
 ```
 
 ## Step 3: Define Your Configuration
@@ -93,21 +98,15 @@ For public APIs that don't require authentication:
                 "properties": {
                     "items": {
                         "type": "array",
+                        "items": {"type": "object"},
                         "description": "List of items"
                     },
                     "count": {
                         "type": "integer",
                         "description": "Number of items returned"
-                    },
-                    "result": {
-                        "type": "boolean",
-                        "description": "Whether the operation succeeded"
-                    },
-                    "error": {
-                        "type": "string",
-                        "description": "Error message if result is false"
                     }
-                }
+                },
+                "required": ["items", "count"]
             }
         }
     }
@@ -173,7 +172,7 @@ For integrations where users provide their own credentials. Use `title` to label
 
 The `fields` value must be valid JSON Schema. The `format`, `label`, and `help_text` properties are used to render the authentication UI in Autohive.
 
-At runtime, credentials are nested under `context.auth["credentials"]`. For custom auth, access fields like: `context.auth.get("credentials", {}).get("api_token")`.
+At runtime, credentials are nested under `context.auth["credentials"]`. For custom auth, access fields like `context.auth["credentials"].get("api_token")`. The `auth.fields` schema validates this inner credentials object, not the whole envelope. Keep `required` for credentials the handler needs.
 
 ### Platform Auth (OAuth2)
 
@@ -198,13 +197,15 @@ For public APIs, omit the `auth` field entirely.
 Create `my_integration.py`:
 
 ```python
+from pathlib import Path
+
 from autohive_integrations_sdk import (
     Integration, ExecutionContext, ActionHandler, ActionResult
 )
 from typing import Dict, Any
 
-# Load integration configuration
-my_integration = Integration.load()
+# Use an explicit path with either an installed or vendored SDK.
+my_integration = Integration.load(Path(__file__).with_name("config.json"))
 
 BASE_URL = "https://api.example.com/v1"
 
@@ -216,38 +217,19 @@ class GetItemsAction(ActionHandler):
     async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
         limit = inputs.get("limit", 10)
 
-        try:
-            response = await context.fetch(
-                f"{BASE_URL}/items",
-                method="GET",
-                params={"limit": limit}
-            )
+        response = await context.fetch(
+            f"{BASE_URL}/items",
+            method="GET",
+            params={"limit": limit}
+        )
+        items = response.data.get("data", [])
 
-            items = response.data.get("data", [])
-
-            return ActionResult(
-                data={
-                    "items": items,
-                    "count": len(items),
-                    "result": True,
-                },
-                cost_usd=0.0
-            )
-        except Exception as e:
-            return ActionResult(
-                data={
-                    "items": [],
-                    "count": 0,
-                    "result": False,
-                    "error": str(e),
-                },
-                cost_usd=0.0
-            )
+        return ActionResult(data={"items": items, "count": len(items)})
 ```
 
 ### Key Concepts
 
-**`Integration.load()`** — Loads your `config.json` and creates the integration instance. Call this at module level.
+**`Integration.load(config_path)`** — Loads your `config.json` and creates the integration instance. Call this at module level with a path relative to the entry point, not the working directory. Without an explicit path, the SDK infers the configuration location from its own installation path; that layout is intended for vendored deployment dependencies, not a normal virtual-environment install.
 
 **`@integration.action("action_name")`** — Decorator that registers a handler class for the named action. The name must match a key in your `config.json` `actions` object.
 
@@ -257,13 +239,36 @@ class GetItemsAction(ActionHandler):
 - `context.fetch(url, ...)` — Make HTTP requests with automatic auth handling; returns a `FetchResponse` with `.status`, `.headers`, and `.data` attributes
 - `context.auth` — Access authentication credentials
 
-**`ActionResult`** — The required return type for all action handlers. Contains:
+**`ActionResult`** — The successful return type for action handlers. Use `ActionError` for expected application errors. `ActionResult` contains:
 - `data` — Your response data (validated against `output_schema`)
 - `cost_usd` — Optional cost in USD for billing tracking (see [billing docs](billing.md))
 
+### Reading execution results
+
+`execute_action()` wraps the handler's return value in an `IntegrationResult`. Check its `type` before reading the payload:
+
+| Result type | Payload |
+|-------------|---------|
+| `ResultType.ACTION` | `result.result.data` and optional `result.result.cost_usd` |
+| `ResultType.ACTION_ERROR` | `result.result.message` and optional `result.result.cost_usd` |
+| `ResultType.VALIDATION_ERROR` | A dictionary at `result.result`, including `source` (`input`, `auth`, or `output`) and the validation message |
+
+Return an `ActionError` rather than raising it. It bypasses the success output schema. Unexpected exceptions still propagate. Some generated API descriptions use `ERROR` for application errors or omit the validation-error dictionary; use the result types above for `execute_action()`.
+
 ### Making HTTP Requests
 
-Use `context.fetch()` for all HTTP calls. It handles authentication headers, retries, timeouts, and response parsing automatically. It returns a `FetchResponse` object — access the parsed body via `.data`, the HTTP status via `.status`, and response headers via `.headers`.
+Use `context.fetch()` for HTTP calls. It handles platform OAuth headers, retries, timeouts, and response parsing. Custom auth headers remain the handler's responsibility. It returns a `FetchResponse` object — access the parsed body via `.data`, the HTTP status via `.status`, and response headers via `.headers`.
+
+In SDK 2.1.0, set a custom `User-Agent` through `headers`:
+
+```python
+response = await context.fetch(
+    f"{BASE_URL}/items",
+    headers={"User-Agent": "MyIntegration/1.0"}
+)
+```
+
+SDK 2.1.0 has no `user_agent` convenience argument or SDK-specific default User-Agent. Use the explicit header form above.
 
 ```python
 # GET with query parameters
@@ -287,7 +292,7 @@ new_item = response.data
 response = await context.fetch(
     f"{BASE_URL}/items",
     method="POST",
-    headers={"Content-Type": "application/x-www-form-urlencoded"},
+    content_type="application/x-www-form-urlencoded",
     data={"name": "New Item"}
 )
 result = response.data
@@ -319,12 +324,14 @@ from autohive_integrations_sdk import ActionError, HTTPError
 
 @my_integration.action("my_action_handler")
 class MyActionHandler(ActionHandler):
-    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext):
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult | ActionError:
         try:
             response = await context.fetch(url)
-        except HTTPError as e:
+        except HTTPError as exc:
+            if exc.status != 404:
+                raise
             return ActionError(
-                message=f"API call failed: {e.message}",
+                message="The requested resource was not found.",
                 cost_usd=0.01  # API call was made, cost was still incurred
             )
 
@@ -332,6 +339,8 @@ class MyActionHandler(ActionHandler):
 ```
 
 Use `ActionError` for expected, application-level failures. For unexpected infrastructure errors, let exceptions propagate normally.
+
+SDK 2.1.0 also preserves response headers on `HTTPError` and `RateLimitError`. Read only the values your caller needs, matching header names case-insensitively. See [HTTP error headers](patterns.md#http-error-headers-sdk-210) for an example that handles a provider's duplicate-record override without exposing all headers.
 
 ### Handler Class Naming
 
@@ -351,22 +360,11 @@ class CreateInvoiceAction(ActionHandler):
 
 ### `__init__.py`
 
-Can be empty, or contain a minimal import and export:
+Create an empty root `__init__.py`. Do not re-export `my_integration` from this file: pytest can import it without a package context in the hyphenated `my-integration/` directory, causing relative imports to fail.
 
-```python
-# Option 1: empty file (sufficient)
+### Integration icon
 
-# Option 2: import and export
-from .my_integration import my_integration
-
-__all__ = ["my_integration"]
-```
-
-Do not add any logic, logging, or additional code to this file.
-
-### `icon.png` or `icon.svg`
-
-Add a 512×512 pixel icon for your integration.
+Add a 512×512 pixel `icon.png`, `icon.jpg`, or `icon.jpeg`. HiveUp does not accept SVG icons.
 
 ### `README.md`
 
@@ -378,46 +376,67 @@ Document your integration: what it does, how to authenticate, what each action a
 
 Can be empty.
 
-### `tests/context.py`
+### `pytest.ini` (standalone only)
 
-Sets up the import path so tests can find your integration:
+For a standalone integration, create this configuration to keep offline tests discoverable by both pytest and HiveUp. In an integrations monorepo, omit this file and inherit the repository-root pytest configuration instead. A local `pytest.ini` prevents discovery of shared root fixtures such as `env_credentials` and `make_context`.
+
+```ini
+[pytest]
+python_files = test_*_unit.py
+asyncio_mode = auto
+markers =
+    unit: Offline unit tests
+```
+
+### `tests/conftest.py`
+
+Set up imports and mock HTTP calls. The tutorial's configuration has no auth, so this fixture uses `auth={}`:
 
 ```python
 import sys
-import os
+from pathlib import Path
+from unittest.mock import AsyncMock
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from my_integration import my_integration  # noqa: F401
-```
-
-### `tests/test_my_integration.py`
-
-```python
-import asyncio
-from context import my_integration
+import pytest
 from autohive_integrations_sdk import ExecutionContext
 
-
-async def test_get_items():
-    """Test fetching items."""
-    inputs = {"limit": 5}
-
-    async with ExecutionContext(auth={}) as context:
-        result = await my_integration.execute_action("get_items", inputs, context)
-
-        # execute_action returns an IntegrationResult
-        # result.result contains the ActionResult
-        # result.result.data contains your response data
-        data = result.result.data
-        assert "items" in data
-        assert "count" in data
-        assert data["result"] is True
-        print(f"Got {data['count']} items")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
-if __name__ == "__main__":
-    asyncio.run(test_get_items())
+@pytest.fixture
+def mock_context():
+    context = ExecutionContext(auth={})
+    context.fetch = AsyncMock()
+    return context
+```
+
+### `tests/test_my_integration_unit.py`
+
+```python
+import pytest
+from autohive_integrations_sdk import FetchResponse, ResultType
+from my_integration import my_integration
+
+pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
+
+
+async def test_get_items(mock_context):
+    mock_context.fetch.return_value = FetchResponse(
+        status=200, headers={}, data={"data": [{"id": "item-7"}]}
+    )
+
+    result = await my_integration.execute_action("get_items", {"limit": 5}, mock_context)
+
+    # Validation errors are also IntegrationResult values, not raised exceptions.
+    assert result.type == ResultType.ACTION
+    assert result.result.data == {"items": [{"id": "item-7"}], "count": 1}
+```
+
+From your integration directory, run the tests without contacting a provider:
+
+```bash
+python -m pip install pytest pytest-asyncio
+python -m pytest tests/ -m unit -v
 ```
 
 For integrations that require authentication, pass the wrapped auth envelope. The `credentials` object must match your `auth.fields` schema, and `auth_type` must be present:
@@ -431,7 +450,7 @@ async with ExecutionContext(auth=auth) as context:
     result = await my_integration.execute_action("get_items", inputs, context)
 ```
 
-> **Note:** The platform always passes `context.auth` as the wrapped envelope `{"auth_type": "...", "credentials": {"api_token": "..."}}`, and the SDK validates it as such — flat auth is rejected with a `source="auth"` validation error. Handlers should read individual credentials directly from the envelope via `context.auth["credentials"]` (for example `context.auth["credentials"].get("api_token")`). Local tests must use the same wrapped shape.
+> **Note:** When `auth.fields` is configured, the SDK requires the wrapped envelope and validates its inner `credentials` object. Flat auth or missing required credentials produce a `source="auth"` validation error before the handler runs. Handlers read credentials via `context.auth["credentials"]`; local wrapper tests must supply the same shape. Configurations without `auth.fields`, including the no-auth tutorial above, skip this schema check.
 
 For **platform OAuth** integrations (where `context.fetch()` auto-injects the Bearer token), pass the full wrapped structure in tests:
 
@@ -460,10 +479,11 @@ my-integration/
 │   ├── __init__.py
 │   ├── items.py              # Item-related actions
 │   └── users.py              # User-related actions
+├── pytest.ini               # Standalone only; omit in an integrations monorepo
 └── tests/
     ├── __init__.py
-    ├── context.py
-    └── test_my_integration.py
+    ├── conftest.py
+    └── test_my_integration_unit.py
 ```
 
 **Main entry point (`my_integration.py`):**
@@ -499,20 +519,21 @@ When using this modular pattern, the root `__init__.py` is optional.
 
 ## Validation
 
-Before submitting, validate your integration using the [autohive-integrations-tooling](https://github.com/autohive-ai/autohive-integrations-tooling):
+Install HiveUp using the [Tooling installation instructions](https://github.com/Autohive-AI/autohive-integrations-tooling#install-hiveup-from-a-local-build). HiveUp is not published to PyPI. From the parent of your integration directory:
 
 ```bash
-# Validate structure and config
-python scripts/validate_integration.py my-integration
+# Run validation, code-quality checks, and unit tests
+hiveup validate my-integration
 
-# Run all code quality checks
-python scripts/check_code.py my-integration
+# Run unit tests or a focused config/code synchronization check
+hiveup test my-integration
+hiveup check sync my-integration
 ```
 
-See the tooling repo's documentation for setup instructions and the full list of checks.
+HiveUp creates isolated environments from each integration's `requirements.txt`; it does not use an editable SDK checkout. Unit tests must be named `tests/test_*_unit.py` and marked `unit`. Add live provider tests separately as `test_*_integration.py` and run them explicitly with test credentials.
 
 ## Next Steps
 
 - [Billing and cost tracking](billing.md) — report per-action costs via `ActionResult.cost_usd`
 - [Connected account information](connected_account.md) — display which account authorized the integration
-- [autohive-integrations-tooling](https://github.com/autohive-ai/autohive-integrations-tooling) — CI/CD validation, checklist, and script reference
+- [autohive-integrations-tooling](https://github.com/autohive-ai/autohive-integrations-tooling) — HiveUp commands, CI validation, and the integration checklist

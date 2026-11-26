@@ -44,7 +44,8 @@
                         "type": "object",
                         "description": "The result data."
                     }
-                }
+                },
+                "required": ["result"]
             }
         }
     }

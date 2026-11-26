@@ -916,6 +916,7 @@ class Integration:
             handler = self._action_handlers[name]()
             previous_identity = (context._integration_name, context._integration_version)
             context._set_integration_identity(self.config.name, self.config.version)
+            result = None
             try:
                 result = await handler.execute(inputs, context)
 
@@ -924,7 +925,9 @@ class Integration:
                     result.data = await convert_file_outputs(result.data)
             except FileTransferError as e:
                 # A file whose content cannot be read is an action failure, not a crash.
-                result = ActionError(message=str(e))
+                # The handler has run by then, so a cost that it reported is kept.
+                cost_usd = result.cost_usd if isinstance(result, ActionResult) else None
+                result = ActionError(message=str(e), cost_usd=cost_usd)
             finally:
                 context._set_integration_identity(*previous_identity)
 

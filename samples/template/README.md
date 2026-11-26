@@ -39,6 +39,8 @@ The starter sends `example_input` in a JSON POST body and returns the provider's
 
 ## Testing
 
+The included `pytest.ini` is for standalone use. When copying this sample into an integrations monorepo, omit or remove it and inherit the repository-root pytest configuration so shared fixtures such as `env_credentials` and `make_context` remain available.
+
 From this sample's directory, with a virtual environment active:
 
 ```bash

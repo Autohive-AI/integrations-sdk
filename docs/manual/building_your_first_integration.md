@@ -18,11 +18,11 @@ Every Autohive integration lives in its own directory and follows this structure
 my-integration/
 ├── config.json              # Integration metadata and action definitions
 ├── my_integration.py        # Main implementation (entry point)
-├── __init__.py              # Package init — only import and __all__
+├── __init__.py              # Empty file; no re-exports
 ├── requirements.txt         # Dependencies (must include autohive-integrations-sdk)
 ├── README.md                # Documentation
 ├── icon.png                 # PNG or JPEG icon (512×512 pixels)
-├── pytest.ini               # Unit-test discovery and markers
+├── pytest.ini               # Standalone only; omit in an integrations monorepo
 └── tests/
     ├── __init__.py           # Can be empty
     ├── conftest.py           # Import setup and offline context fixture
@@ -360,18 +360,7 @@ class CreateInvoiceAction(ActionHandler):
 
 ### `__init__.py`
 
-Can be empty, or contain a minimal import and export:
-
-```python
-# Option 1: empty file (sufficient)
-
-# Option 2: import and export
-from .my_integration import my_integration
-
-__all__ = ["my_integration"]
-```
-
-Do not add any logic, logging, or additional code to this file.
+Create an empty root `__init__.py`. Do not re-export `my_integration` from this file: pytest can import it without a package context in the hyphenated `my-integration/` directory, causing relative imports to fail.
 
 ### Integration icon
 
@@ -387,9 +376,9 @@ Document your integration: what it does, how to authenticate, what each action a
 
 Can be empty.
 
-### `pytest.ini`
+### `pytest.ini` (standalone only)
 
-Keep offline tests discoverable by both pytest and HiveUp:
+For a standalone integration, create this configuration to keep offline tests discoverable by both pytest and HiveUp. In an integrations monorepo, omit this file and inherit the repository-root pytest configuration instead. A local `pytest.ini` prevents discovery of shared root fixtures such as `env_credentials` and `make_context`.
 
 ```ini
 [pytest]
@@ -490,7 +479,7 @@ my-integration/
 │   ├── __init__.py
 │   ├── items.py              # Item-related actions
 │   └── users.py              # User-related actions
-├── pytest.ini
+├── pytest.ini               # Standalone only; omit in an integrations monorepo
 └── tests/
     ├── __init__.py
     ├── conftest.py

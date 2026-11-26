@@ -16,7 +16,7 @@ my-integration/
 ├── requirements.txt
 ├── README.md
 ├── icon.png                  # or icon.jpg / icon.jpeg, 512×512 pixels
-├── pytest.ini
+├── pytest.ini                # Standalone only; omit in an integrations monorepo
 └── tests/
     ├── __init__.py
     ├── conftest.py
@@ -35,7 +35,7 @@ my-integration/
 ├── requirements.txt
 ├── README.md
 ├── icon.png                  # or icon.jpg / icon.jpeg, 512×512 pixels
-├── pytest.ini
+├── pytest.ini                # Standalone only; omit in an integrations monorepo
 ├── actions/
 │   ├── __init__.py            # imports sub-modules to register handlers
 │   ├── items.py
@@ -73,7 +73,7 @@ In this pattern:
 
 - Required for single-file integrations (warning if missing)
 - Optional for modular integrations with an `actions/` subdirectory
-- Can be empty, or contain a minimal import and `__all__`
+- Keep the root file empty in hyphenated integration directories. Relative re-exports can fail when pytest imports it without a package context.
 
 ### `requirements.txt`
 
@@ -90,6 +90,8 @@ Add any additional libraries your integration needs (e.g., `feedparser`, `stripe
 ### Unit tests
 
 Name offline tests `tests/test_*_unit.py` and mark them `unit`; HiveUp uses both the filename pattern and marker. Put fixtures and import setup in `tests/conftest.py`. Mock `context.fetch()` with `FetchResponse`, use the platform auth envelope when auth is configured, and assert `ResultType.ACTION` before inspecting successful output. See [the tutorial's test setup](building_your_first_integration.md#step-6-write-tests) for `pytest.ini` and runnable examples. Live provider tests use `test_*_integration.py` and are run explicitly, not by HiveUp's unit test command.
+
+Use an integration-local `pytest.ini` only for standalone projects. When copying a sample into an integrations monorepo, omit or remove that file and inherit the repository-root pytest configuration so shared fixtures such as `env_credentials` and `make_context` remain available.
 
 ## Naming Conventions
 

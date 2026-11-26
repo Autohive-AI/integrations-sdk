@@ -19,6 +19,8 @@ The costs illustrate billing behavior, not actual provider charges. See [Billing
 
 ## Requirements and tests
 
+The included `pytest.ini` is for standalone use. When copying this sample into an integrations monorepo, omit or remove it and inherit the repository-root pytest configuration so shared fixtures such as `env_credentials` and `make_context` remain available.
+
 Use Python 3.13+ and `autohive-integrations-sdk~=2.1.0`. From this sample's directory, with a virtual environment active:
 
 ```bash

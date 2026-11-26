@@ -31,6 +31,11 @@ from autohive_integrations_sdk.files import FileTransferError, INLINE_LIMIT_BYTE
 KEY_PREFIX = "tool-outputs/call-1/"
 OAUTH = {"auth_type": "PlatformOauth2", "credentials": {"access_token": "secret-token"}}
 FILE_REF = {"$ref": FILE_SCHEMA_ID}
+LEGACY_FILE_SCHEMA = {
+    "type": "object",
+    "properties": {"content": {"type": "string"}, "name": {"type": "string"}, "contentType": {"type": "string"}},
+    "required": ["content", "name", "contentType"],
+}
 
 
 # ── Test servers ─────────────────────────────────────────────────────────────
@@ -202,6 +207,37 @@ async def test_inline_input_arrives_as_a_file(tmp_path):
     assert (seen["file"].name, seen["file"].content_type, seen["file"].size) == ("note.txt", "application/octet-stream", 5)
     assert seen["data"] == b"hello"
     assert "note.txt" in repr(seen["file"])
+
+
+async def test_file_field_can_have_any_name_and_a_description(tmp_path):
+    seen = {}
+
+    async def execute(inputs, context):
+        seen.update(inputs)
+        return ActionResult(data={})
+
+    field = {"$ref": FILE_SCHEMA_ID, "description": "The invoice PDF"}
+    integration = make_integration(tmp_path, {"invoice": field})
+    result = await run_action(integration, execute, {"invoice": wire_content(b"a")})
+
+    assert result.type == ResultType.ACTION
+    assert isinstance(seen["invoice"], File)
+
+
+async def test_field_with_the_older_file_convention_keeps_its_dict(tmp_path):
+    seen = {}
+
+    async def execute(inputs, context):
+        seen.update(inputs)
+        return ActionResult(data={"file": inputs["file"]})
+
+    integration = make_integration(tmp_path, {"file": LEGACY_FILE_SCHEMA}, {"file": LEGACY_FILE_SCHEMA})
+    value = wire_content(b"hello", "note.txt")
+    result = await run_action(integration, execute, {"file": value})
+
+    assert result.type == ResultType.ACTION
+    assert seen["file"] == value
+    assert result.result.data == {"file": value}
 
 
 async def test_url_input_is_downloaded_only_when_read_and_without_credentials(tmp_path, remote):
@@ -439,6 +475,37 @@ async def test_small_output_is_returned_inline(tmp_path):
         "doc": {"name": "note.txt", "contentType": "text/plain", "content": base64.b64encode(b"hello").decode()},
         "count": 1,
     }
+
+
+async def test_output_files_in_arrays_and_nested_objects_are_converted(tmp_path):
+    async def execute(inputs, context):
+        return ActionResult(data={
+            "docs": [File.from_bytes(b"a", "a.txt", "text/plain")],
+            "report": {"file": File.from_bytes(b"b", "b.txt", "text/plain")},
+        })
+
+    properties = {
+        "docs": {"type": "array", "items": FILE_REF},
+        "report": {"type": "object", "properties": {"file": FILE_REF}},
+    }
+    integration = make_integration(tmp_path, output_properties=properties)
+    result = await run_action(integration, execute)
+
+    assert result.type == ResultType.ACTION
+    assert result.result.data["docs"][0]["name"] == "a.txt"
+    assert base64.b64decode(result.result.data["report"]["file"]["content"]) == b"b"
+
+
+async def test_inline_input_file_can_be_returned_as_an_output(tmp_path):
+    async def execute(inputs, context):
+        return ActionResult(data={"doc": inputs["doc"]})
+
+    integration = make_integration(tmp_path, {"doc": FILE_REF}, {"doc": FILE_REF})
+    value = wire_content(b"hello", "note.txt")
+    result = await run_action(integration, execute, {"doc": value})
+
+    assert result.type == ResultType.ACTION
+    assert result.result.data == {"doc": value}
 
 
 async def test_large_output_is_uploaded_with_the_grant(tmp_path, remote):

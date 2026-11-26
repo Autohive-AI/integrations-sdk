@@ -60,6 +60,12 @@ DEFAULT_CHUNK_BYTES = 1024 * 1024
 _CONNECT_TIMEOUT_SECONDS = 30
 _READ_TIMEOUT_SECONDS = 60
 
+# An error message quotes the start of the response body. The SDK reads no more of the body than
+# this, and waits no longer than this for it.
+_ERROR_TEXT_CHARACTERS = 500
+_ERROR_BODY_BYTES = 4 * _ERROR_TEXT_CHARACTERS
+_ERROR_BODY_SECONDS = 10
+
 
 class FileTransferError(Exception):
     """A file could not be downloaded or uploaded.
@@ -231,11 +237,33 @@ def _describe(error: BaseException) -> str:
 
 
 async def _error_text(response: aiohttp.ClientResponse) -> str:
-    """The start of an error response's body, for a message. Empty when the body cannot be read."""
+    """The start of an error response's body, for a message.
+
+    Only the start is read, and only for a limited time, so a large or slow error body costs
+    little memory and little time. The rest of the body is not read: the connection is closed.
+    The result is the part that arrived, which is empty when nothing could be read.
+    """
+    start = bytearray()
+
+    async def read_start() -> None:
+        while len(start) < _ERROR_BODY_BYTES:
+            piece = await response.content.read(_ERROR_BODY_BYTES - len(start))
+            if not piece:
+                break
+            start.extend(piece)
+
     try:
-        return (await response.text(errors="replace"))[:500]
+        await asyncio.wait_for(read_start(), _ERROR_BODY_SECONDS)
     except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
-        return ""
+        pass
+    finally:
+        response.close()
+
+    try:
+        text = start.decode(response.charset or "utf-8", errors="replace")
+    except LookupError:
+        text = start.decode("utf-8", errors="replace")
+    return text[:_ERROR_TEXT_CHARACTERS]
 
 
 async def _bytes_chunks(data: bytes, chunk_size: int) -> AsyncIterator[bytes]:

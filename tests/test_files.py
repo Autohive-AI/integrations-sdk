@@ -4,6 +4,7 @@ Transfers run against real local HTTP servers. A mocked session does not send a 
 body or follow a redirect, and those are the behaviours under test.
 """
 
+import asyncio
 import base64
 import gzip
 import hashlib
@@ -50,7 +51,10 @@ class Remote:
         self.requests = []
         self.uploads = []
         self.upload_status = 204
+        self.upload_error_body_bytes = None
+        self.error_charset = "utf-8"
         self.other_origin = None
+        self.closing = asyncio.Event()
         app = web.Application(client_max_size=0)
         app.router.add_get("/download/{name}", self.download)
         app.router.add_get("/gzip/{name}", self.download_gzip)
@@ -58,6 +62,7 @@ class Remote:
         app.router.add_get("/broken/{name}", self.download_broken)
         app.router.add_get("/redirect/{name}", self.redirect)
         app.router.add_get("/broken-error/{name}", self.error_with_a_broken_body)
+        app.router.add_get("/unfinished-error/{size}", self.error_with_a_body_that_never_ends)
         app.router.add_route("*", "/redirect-to-self", self.redirect_to_self)
         app.router.add_route("*", "/status/{status}", self.status)
         app.router.add_post("/storage", self.upload)
@@ -73,7 +78,8 @@ class Remote:
         self.record(request)
         name = request.match_info["name"]
         if name not in self.files:
-            return web.Response(status=404, text="no such file")
+            content_type = f"text/plain; charset={self.error_charset}"
+            return web.Response(status=404, body=b"no such file", headers={"Content-Type": content_type})
         return web.Response(body=self.files[name], content_type="application/octet-stream")
 
     async def download_gzip(self, request):
@@ -112,6 +118,18 @@ class Remote:
         request.transport.close()
         return response
 
+    async def error_with_a_body_that_never_ends(self, request):
+        self.record(request)
+        return await self.unfinished_response(request, 500, int(request.match_info["size"]))
+
+    async def unfinished_response(self, request, status, size):
+        """Send ``size`` bytes of a body, then keep the response open until the server closes."""
+        response = web.StreamResponse(status=status, headers={"Content-Type": "text/plain"})
+        await response.prepare(request)
+        await response.write(b"x" * size)
+        await self.closing.wait()
+        return response
+
     async def redirect_to_self(self, request):
         self.record(request)
         return web.Response(status=308, headers={"Location": str(request.url)}, text="resume incomplete")
@@ -146,6 +164,8 @@ class Remote:
             "fields": fields, "filename": part.filename, "contentType": part.headers.get("Content-Type"),
             "size": size, "sha256": digest.hexdigest(),
         })
+        if self.upload_error_body_bytes is not None:
+            return await self.unfinished_response(request, self.upload_status, self.upload_error_body_bytes)
         return web.Response(status=self.upload_status, text="refused" if self.upload_status >= 400 else "")
 
     def grant(self, **extra) -> dict:
@@ -162,6 +182,8 @@ async def remote():
     await first.server.start_server()
     await second.server.start_server()
     yield first
+    first.closing.set()
+    second.closing.set()
     await first.server.close()
     await second.server.close()
 
@@ -775,6 +797,21 @@ async def test_refused_upload_is_an_action_error(tmp_path, remote):
     assert "Upload of 'big.bin' failed with HTTP 403: refused" in result.result.message
 
 
+async def test_refused_upload_reads_only_the_start_of_the_error_body(tmp_path, remote):
+    remote.upload_status = 403
+    remote.upload_error_body_bytes = 64 * 1024
+
+    async def execute(inputs, context):
+        return ActionResult(data={"doc": File.from_bytes(bytes(INLINE_LIMIT_BYTES + 1), "big.bin", "a/b")})
+
+    integration = make_integration(tmp_path, output_properties={"doc": FILE_REF})
+    # The error body never ends. The action must not wait for the end of it.
+    result = await asyncio.wait_for(run_action(integration, execute, file_transport=remote.grant()), timeout=5)
+
+    assert result.type == ResultType.ACTION_ERROR
+    assert result.result.message.endswith("failed with HTTP 403: " + "x" * 500)
+
+
 async def test_upload_to_an_unreachable_host_is_an_action_error(tmp_path, remote):
     async def execute(inputs, context):
         return ActionResult(data={"doc": File.from_bytes(bytes(INLINE_LIMIT_BYTES + 1), "big.bin", "a/b")})
@@ -998,7 +1035,48 @@ async def test_failed_download_with_an_error_body_that_cannot_be_read_is_an_acti
     result = await run_action(integration, execute)
 
     assert result.type == ResultType.ACTION_ERROR
-    assert "Download of 'a.bin' failed with HTTP 404" in result.result.message
+    assert result.result.message.endswith("Download of 'a.bin' failed with HTTP 404: partial")
+
+
+async def test_failed_download_reads_only_the_start_of_the_error_body(tmp_path, remote):
+    async def execute(inputs, context):
+        return ActionResult(data={"doc": File.from_request(
+            remote.url(f"/unfinished-error/{64 * 1024}"), name="a.bin", content_type="a/b")})
+
+    integration = make_integration(tmp_path, output_properties={"doc": FILE_REF})
+    # The error body never ends. The action must not wait for the end of it.
+    result = await asyncio.wait_for(run_action(integration, execute), timeout=5)
+
+    assert result.type == ResultType.ACTION_ERROR
+    assert result.result.message.endswith("Download of 'a.bin' failed with HTTP 500: " + "x" * 500)
+
+
+async def test_failed_download_stops_waiting_for_a_slow_error_body(tmp_path, remote, monkeypatch):
+    monkeypatch.setattr(files, "_ERROR_BODY_SECONDS", 0.2, raising=False)
+
+    async def execute(inputs, context):
+        return ActionResult(data={"doc": File.from_request(
+            remote.url("/unfinished-error/4"), name="a.bin", content_type="a/b")})
+
+    integration = make_integration(tmp_path, output_properties={"doc": FILE_REF})
+    result = await asyncio.wait_for(run_action(integration, execute), timeout=5)
+
+    assert result.type == ResultType.ACTION_ERROR
+    assert result.result.message.endswith("Download of 'a.bin' failed with HTTP 500: xxxx")
+
+
+async def test_error_body_in_an_unknown_charset_is_still_read(tmp_path, remote):
+    remote.error_charset = "no-such-charset"
+
+    async def execute(inputs, context):
+        return ActionResult(data={"doc": File.from_request(
+            remote.url("/download/gone.bin"), name="gone.bin", content_type="a/b")})
+
+    integration = make_integration(tmp_path, output_properties={"doc": FILE_REF})
+    result = await run_action(integration, execute)
+
+    assert result.type == ResultType.ACTION_ERROR
+    assert "Download of 'gone.bin' failed with HTTP 404: no such file" in result.result.message
 
 
 async def test_from_request_sends_structured_params_as_json_like_fetch(tmp_path, remote):
@@ -1208,6 +1286,26 @@ async def test_fetch_still_follows_a_redirect_when_no_redirect_status_is_accepte
 
     assert response.status == 200
     assert len(remote.other_origin.requests) == 1
+
+
+async def test_fetch_raises_for_a_redirect_status_that_is_not_the_accepted_one(remote):
+    remote.other_origin.files["a.bin"] = b"redirected content"
+
+    async with ExecutionContext() as context:
+        with pytest.raises(HTTPError) as error:
+            await context.fetch(remote.url("/redirect/a.bin"), accept_statuses=[308])
+
+    assert error.value.status == 302
+    assert remote.other_origin.requests == []
+
+
+async def test_fetch_without_an_accepted_redirect_status_returns_a_3xx_that_has_no_location(remote):
+    async with ExecutionContext() as context:
+        response = await context.fetch(remote.url("/status/300"), accept_statuses=[409])
+        with pytest.raises(HTTPError):
+            await context.fetch(remote.url("/status/300"), accept_statuses=[308])
+
+    assert response.status == 300
 
 
 async def test_fetch_accept_statuses_can_accept_429(remote):

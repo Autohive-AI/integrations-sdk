@@ -565,6 +565,7 @@ class ExecutionContext:
                 a resumable upload can answer ``308`` between chunks.  When a
                 redirect status (3xx) is accepted, this request follows no
                 redirect, so that the accepted response is the one returned.
+                Any other redirect status then raises ``HTTPError``.
 
         Returns:
             A ``FetchResponse`` containing the HTTP status code, response
@@ -620,7 +621,11 @@ class ExecutionContext:
             ) as response:
                 content_type = response.headers.get("Content-Type", "")
 
-                accepted = response.ok or response.status in (accept_statuses or ())
+                # When redirects are followed, a 3xx that arrives here has no redirect to follow,
+                # and it is returned as before. When they are not followed, a redirect status is
+                # a success only if the caller accepts that status.
+                success = response.ok if follow_redirects else 200 <= response.status < 300
+                accepted = success or response.status in (accept_statuses or ())
 
                 if response.status == 429 and not accepted:  # Rate limit
                     retry_after = int(response.headers.get("Retry-After", 60))

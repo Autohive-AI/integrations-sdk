@@ -117,7 +117,7 @@ upload with `iter_chunks()` and `context.fetch()`. Two options of `fetch()` help
   reject a request that has a token.
 - `accept_statuses=[308]` returns a response with that status and does not raise `HTTPError`. Some
   services answer `308` between the chunks of an upload. When a redirect status is accepted, the
-  request follows no redirect.
+  request follows no redirect, and any other redirect status raises `HTTPError`.
 
 ```python
 CHUNK_BYTES = 8 * 256 * 1024

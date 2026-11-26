@@ -116,6 +116,129 @@ async def test_files_in_arrays_and_nested_objects_are_converted(tmp_path):
     assert isinstance(seen["attachments"][0]["file"], File)
     assert seen["attachments"][0]["caption"] == "first"
     assert [type(doc) for doc in seen["docs"]] == [File, File]
+    assert [await doc.read() for doc in seen["docs"]] == [b"b", b"c"]
+
+
+async def run_and_capture(tmp_path, input_schema, inputs):
+    """Run an action whose whole input schema is ``input_schema``, and return the result and the inputs it saw."""
+    seen = {}
+
+    async def execute(action_inputs, context):
+        seen.update(action_inputs)
+        return ActionResult(data={})
+
+    integration = make_integration(tmp_path)
+    integration.config.actions["run"].input_schema = input_schema
+    result = await run_action(integration, execute, inputs)
+    return result, seen
+
+
+async def test_nullable_file_declared_with_any_of_is_converted(tmp_path):
+    schema = {"type": "object", "properties": {"doc": {"anyOf": [{"type": "null"}, FILE_REF]}}}
+
+    result, seen = await run_and_capture(tmp_path, schema, {"doc": wire_content(b"a")})
+    assert result.type == ResultType.ACTION
+    assert await seen["doc"].read() == b"a"
+
+    result, seen = await run_and_capture(tmp_path, schema, {"doc": None})
+    assert result.type == ResultType.ACTION
+    assert seen == {"doc": None}
+
+
+async def test_file_in_the_branch_of_one_of_that_the_value_matches_is_converted(tmp_path):
+    upload = {"type": "object", "properties": {"kind": {"const": "upload"}, "doc": FILE_REF}, "required": ["kind", "doc"]}
+    link = {"type": "object", "properties": {"kind": {"const": "link"}, "href": {"type": "string"}}, "required": ["kind", "href"]}
+    schema = {"type": "object", "properties": {"source": {"oneOf": [link, upload]}}}
+
+    result, seen = await run_and_capture(tmp_path, schema, {"source": {"kind": "upload", "doc": wire_content(b"a")}})
+    assert result.type == ResultType.ACTION
+    assert await seen["source"]["doc"].read() == b"a"
+
+    link_value = {"source": {"kind": "link", "href": "https://example.com"}}
+    result, seen = await run_and_capture(tmp_path, schema, link_value)
+    assert result.type == ResultType.ACTION
+    assert seen == link_value
+
+
+async def test_array_of_files_in_a_branch_of_any_of_is_converted(tmp_path):
+    schema = {"type": "object", "properties": {"docs": {"anyOf": [FILE_REF, {"type": "array", "items": FILE_REF}]}}}
+
+    result, seen = await run_and_capture(tmp_path, schema, {"docs": [wire_content(b"a"), wire_content(b"b")]})
+
+    assert result.type == ResultType.ACTION
+    assert [await doc.read() for doc in seen["docs"]] == [b"a", b"b"]
+
+
+async def test_file_declared_inside_all_of_is_converted(tmp_path):
+    schema = {"type": "object", "allOf": [{"properties": {"doc": FILE_REF}}, {"required": ["doc"]}]}
+
+    result, seen = await run_and_capture(tmp_path, schema, {"doc": wire_content(b"a")})
+
+    assert result.type == ResultType.ACTION
+    assert await seen["doc"].read() == b"a"
+
+
+async def test_file_behind_a_reference_into_the_same_schema_is_converted(tmp_path):
+    schema = {
+        "type": "object",
+        "definitions": {
+            "attachment": {"type": "object", "properties": {"file": FILE_REF, "caption": {"type": "string"}}},
+        },
+        "properties": {"attachments": {"type": "array", "items": {"$ref": "#/definitions/attachment"}}},
+    }
+
+    result, seen = await run_and_capture(tmp_path, schema, {"attachments": [{"file": wire_content(b"a"), "caption": "c"}]})
+
+    assert result.type == ResultType.ACTION
+    assert await seen["attachments"][0]["file"].read() == b"a"
+    assert seen["attachments"][0]["caption"] == "c"
+
+
+async def test_files_in_a_recursive_schema_are_converted(tmp_path):
+    schema = {
+        "type": "object",
+        "properties": {"doc": FILE_REF, "children": {"type": "array", "items": {"$ref": "#"}}},
+    }
+    inputs = {"doc": wire_content(b"a"), "children": [{"doc": wire_content(b"b"), "children": []}]}
+
+    result, seen = await run_and_capture(tmp_path, schema, inputs)
+
+    assert result.type == ResultType.ACTION
+    assert await seen["doc"].read() == b"a"
+    assert await seen["children"][0]["doc"].read() == b"b"
+
+
+async def test_reference_that_points_at_itself_or_nowhere_is_left_alone(tmp_path):
+    from autohive_integrations_sdk.files import convert_file_inputs
+
+    value = wire_content(b"a")
+    loop = {"definitions": {"a": {"$ref": "#/definitions/a"}}, "properties": {"doc": {"$ref": "#/definitions/a"}}}
+    missing = {"properties": {"doc": {"$ref": "#/definitions/missing"}}}
+    other_document = {"properties": {"doc": {"$ref": "https://example.invalid/other.json"}}}
+
+    for schema in (loop, missing, other_document, "not a schema"):
+        assert convert_file_inputs(schema, {"doc": value}) == {"doc": value}
+
+
+async def test_files_in_additional_properties_are_converted(tmp_path):
+    schema = {"type": "object", "properties": {"note": {"type": "string"}}, "additionalProperties": FILE_REF}
+
+    result, seen = await run_and_capture(tmp_path, schema, {"note": "n", "first": wire_content(b"a")})
+
+    assert result.type == ResultType.ACTION
+    assert seen["note"] == "n"
+    assert await seen["first"].read() == b"a"
+
+
+async def test_files_at_fixed_positions_of_an_array_are_converted(tmp_path):
+    pair = {"type": "array", "items": [{"type": "string"}, FILE_REF], "additionalItems": FILE_REF}
+    schema = {"type": "object", "properties": {"pair": pair}}
+
+    result, seen = await run_and_capture(tmp_path, schema, {"pair": ["label", wire_content(b"a"), wire_content(b"b")]})
+
+    assert result.type == ResultType.ACTION
+    assert seen["pair"][0] == "label"
+    assert [await item.read() for item in seen["pair"][1:]] == [b"a", b"b"]
 
 
 async def test_file_shaped_value_outside_a_file_field_is_left_alone(tmp_path):

@@ -17,7 +17,9 @@ On the wire, between the platform and the SDK, a file is a JSON object in one of
 Handlers never see these forms. This version of the SDK reads and writes the first form only.
 """
 import base64
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+
+from jsonschema import Draft7Validator, RefResolver
 
 FILE_SCHEMA_ID = "https://cdn.autohive.com/schemas/sdk/file/v1.json"
 """The ``$ref`` that declares a file field in ``config.json``."""
@@ -100,19 +102,84 @@ def file_from_wire(value: Dict[str, Any]) -> File:
 def convert_file_inputs(schema: Any, value: Any) -> Any:
     """Replace each value at a file position of ``schema`` with a :class:`File`.
 
-    Follows ``properties`` and ``items``. A value at any other position is returned unchanged,
-    whatever its shape.
+    ``value`` is valid against ``schema``. The file positions are found the way validation finds
+    them: through ``properties``, ``additionalProperties``, ``items``, ``allOf``, ``anyOf``,
+    ``oneOf`` and a reference to another part of the schema. A value at any other position is
+    returned unchanged, whatever its shape.
     """
+    if not isinstance(schema, dict):
+        return value
+    resolver = RefResolver.from_schema(schema, store=dict(SCHEMA_STORE))
+    return _convert_inputs(schema, value, resolver, ())
+
+
+def _convert_inputs(schema: Any, value: Any, resolver: RefResolver, followed: Tuple[str, ...]) -> Any:
     if is_file_schema(schema):
         return file_from_wire(value) if isinstance(value, dict) else value
     if not isinstance(schema, dict):
         return value
-    properties = schema.get("properties")
-    if isinstance(value, dict) and isinstance(properties, dict):
-        return {key: convert_file_inputs(properties.get(key), item) for key, item in value.items()}
-    if isinstance(value, list) and isinstance(schema.get("items"), dict):
-        return [convert_file_inputs(schema["items"], item) for item in value]
+
+    reference = schema.get("$ref")
+    if isinstance(reference, str):
+        # A reference into the same schema. The keywords beside a reference do not apply.
+        # A reference to any other document is not followed: that would be a network request.
+        if not reference.startswith("#") or reference in followed:
+            return value
+        try:
+            _, target = resolver.resolve(reference)
+        except Exception:
+            return value
+        return _convert_inputs(target, value, resolver, followed + (reference,))
+
+    for branch in _schemas(schema.get("allOf")):
+        value = _convert_inputs(branch, value, resolver, followed)
+
+    for keyword in ("anyOf", "oneOf"):
+        for branch in _schemas(schema.get(keyword)):
+            # A branch applies when the value is valid against it. The first one that has a file wins.
+            if Draft7Validator(branch, resolver=resolver).is_valid(value):
+                converted = _convert_inputs(branch, value, resolver, followed)
+                if _has_file(converted):
+                    return converted
+
+    if isinstance(value, dict):
+        properties = schema.get("properties")
+        properties = properties if isinstance(properties, dict) else {}
+        additional = schema.get("additionalProperties")
+        if not properties and not isinstance(additional, dict):
+            return value
+        return {
+            key: _convert_inputs(properties[key] if key in properties else additional, item, resolver, ())
+            for key, item in value.items()
+        }
+
+    if isinstance(value, list):
+        items = schema.get("items")
+        if isinstance(items, dict):
+            return [_convert_inputs(items, item, resolver, ()) for item in value]
+        if isinstance(items, list):
+            # One schema for each position, then additionalItems for the rest.
+            rest = schema.get("additionalItems")
+            return [
+                _convert_inputs(items[index] if index < len(items) else rest, item, resolver, ())
+                for index, item in enumerate(value)
+            ]
+
     return value
+
+
+def _schemas(value: Any) -> list:
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def _has_file(value: Any) -> bool:
+    if isinstance(value, File):
+        return True
+    if isinstance(value, dict):
+        return any(_has_file(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_has_file(item) for item in value)
+    return False
 
 
 async def convert_file_outputs(value: Any) -> Any:

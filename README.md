@@ -25,6 +25,7 @@ This checkout tracks SDK 3.x development (`3.0.0.dev0`); installing it with `pip
 | [Building Your First Integration](docs/manual/building_your_first_integration.md) | End-to-end tutorial covering config, actions, auth, testing |
 | [Integration Structure](docs/manual/integration_structure.md) | Directory layout, `config.json` schema reference, naming conventions |
 | [Patterns & Best Practices](docs/manual/patterns.md) | Pagination, API helpers, multi-field auth |
+| [Files](docs/manual/files.md) | Declaring file fields, reading and returning `File` objects |
 | [Billing & Cost Tracking](docs/manual/billing.md) | Reporting per-action costs via `ActionResult.cost_usd` |
 | [Connected Accounts](docs/manual/connected_account.md) | Fetching and displaying external account info |
 | [API Reference](docs/apidocs/) | Generated API docs (pdoc) |

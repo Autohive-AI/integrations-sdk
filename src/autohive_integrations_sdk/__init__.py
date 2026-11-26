@@ -7,3 +7,4 @@ from autohive_integrations_sdk.integration import (
     ConnectedAccountInfo, ValidationError, HTTPError, RateLimitError,
     ActionResult, ActionError, IntegrationResult, ResultType, FetchResponse
 )
+from autohive_integrations_sdk.files import File, FILE_SCHEMA_ID

@@ -1,5 +1,37 @@
 # Release Notes
 
+## 3.0.0
+
+### New Feature: files
+
+An action can now declare a file field explicitly. See [Files](docs/manual/files.md).
+
+- **A file type.** A field is a file when its schema in `config.json` is
+  `{"$ref": "https://cdn.autohive.com/schemas/sdk/file/v1.json"}`. The property
+  name no longer matters. The reference is also exported as `FILE_SCHEMA_ID`.
+  The SDK validates against its own copy of the schema; nothing is fetched.
+- **`File` objects.** A handler receives a `File` for each file input and
+  returns a `File` for each file output. `File.read()` returns the content, and
+  `File.from_bytes(data, name, content_type)` builds a file to return.
+
+```python
+@integration.action("convert")
+class Convert(ActionHandler):
+    async def execute(self, inputs, context):
+        source: File = inputs["document"]
+        pdf = to_pdf(await source.read())
+        return ActionResult(data={
+            "pdf": File.from_bytes(pdf, f"{source.name}.pdf", "application/pdf"),
+        })
+```
+
+### Compatibility
+
+- Only a field declared with the file reference gets a `File`. A field that
+  uses the older convention (an object with `content`, `name` and
+  `contentType`) is passed to the handler unchanged, as a `dict`. Change the
+  schema and the handler of an action together.
+
 ## 2.1.0
 
 ### New Feature

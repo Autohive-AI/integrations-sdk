@@ -43,11 +43,19 @@ from urllib.parse import urlencode
 
 # Third-Party Imports
 import aiohttp
-from jsonschema import validate, Draft7Validator
+from jsonschema import validate, Draft7Validator, RefResolver
 
 
 # Local Imports
 from autohive_integrations_sdk import __version__
+from autohive_integrations_sdk.files import (
+    SCHEMA_STORE, FileTransferError, convert_file_inputs, convert_file_outputs,
+)
+
+
+def _schema_validator(schema: Dict[str, Any]) -> Draft7Validator:
+    """A validator that resolves the SDK's own schema references without a network request."""
+    return Draft7Validator(schema, resolver=RefResolver.from_schema(schema, store=dict(SCHEMA_STORE)))
 
 
 # ---- Type Definitions ----
@@ -888,7 +896,7 @@ class Integration:
 
             # Validate inputs against action schema
             action_config = self.config.actions[name]
-            validator = Draft7Validator(action_config.input_schema)
+            validator = _schema_validator(action_config.input_schema)
             errors = sorted(validator.iter_errors(inputs), key=lambda e: e.path)
             if errors:
                 message = ""
@@ -898,12 +906,25 @@ class Integration:
 
             self._validate_auth(context)
 
+            # Each input declared with the file schema becomes a File
+            try:
+                inputs = convert_file_inputs(action_config.input_schema, inputs)
+            except FileTransferError as e:
+                raise ValidationError(str(e), action_config.input_schema, source="input")
+
             # Create handler instance and execute
             handler = self._action_handlers[name]()
             previous_identity = (context._integration_name, context._integration_version)
             context._set_integration_identity(self.config.name, self.config.version)
             try:
                 result = await handler.execute(inputs, context)
+
+                # Each File in the result becomes its wire form
+                if isinstance(result, ActionResult):
+                    result.data = await convert_file_outputs(result.data)
+            except FileTransferError as e:
+                # A file whose content cannot be read is an action failure, not a crash.
+                result = ActionError(message=str(e))
             finally:
                 context._set_integration_identity(*previous_identity)
 
@@ -923,7 +944,7 @@ class Integration:
                 )
 
             # Validate output schema against the data inside ActionResult
-            validator = Draft7Validator(action_config.output_schema)
+            validator = _schema_validator(action_config.output_schema)
             errors = sorted(validator.iter_errors(result.data), key=lambda e: e.path)
             if errors:
                 message = ""

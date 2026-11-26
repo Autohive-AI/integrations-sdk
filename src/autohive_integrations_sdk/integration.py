@@ -434,6 +434,7 @@ class ExecutionContext:
         self.logger = logger or logging.getLogger(__name__)
         """Logger instance"""
         self._session: Optional[aiohttp.ClientSession] = None
+        self._uploaded_file_keys: set = set()
         self._integration_name: Optional[str] = None
         self._integration_version: Optional[str] = None
 
@@ -468,7 +469,9 @@ class ExecutionContext:
         if not any(key.lower() == "user-agent" for key in (headers or {})):
             final_headers["User-Agent"] = user_agent or self._build_default_user_agent()
 
-        if send_auth and self.auth and "Authorization" not in (headers or {}):
+        # Header names are not case-sensitive, so "authorization" from the caller counts too.
+        has_authorization = any(key.lower() == "authorization" for key in (headers or {}))
+        if send_auth and self.auth and not has_authorization:
             auth_type = AuthType(self.auth.get("auth_type", "PlatformOauth2"))
             credentials = self.auth.get("credentials", {})
 
@@ -476,6 +479,20 @@ class ExecutionContext:
                 final_headers["Authorization"] = f"Bearer {credentials['access_token']}"
 
         return final_headers
+
+    @staticmethod
+    def _url_with_params(url: str, params: Optional[Dict[str, Any]]) -> str:
+        """Add query parameters to a URL. A dict or list value is sent as JSON; ``None`` is left out."""
+        if not params:
+            return url
+        flat_params = {}
+        for key, value in params.items():
+            if isinstance(value, (dict, list)):
+                flat_params[key] = jsonX.dumps(value)
+            elif value is not None:
+                flat_params[key] = str(value)
+        query_string = urlencode(flat_params)
+        return f"{url}{'&' if '?' in url else '?'}{query_string}"
 
     def _set_integration_identity(self, name: Optional[str], version: Optional[str]) -> None:
         """Attach integration identity for SDK-generated request metadata."""
@@ -545,7 +562,9 @@ class ExecutionContext:
                 upload URL, which can reject a request that has a token.
             accept_statuses: Non-2xx status codes to return as a normal
                 ``FetchResponse`` instead of raising ``HTTPError``.  For example,
-                a resumable upload can answer ``308`` between chunks.
+                a resumable upload can answer ``308`` between chunks.  When a
+                redirect status (3xx) is accepted, this request follows no
+                redirect, so that the accepted response is the one returned.
 
         Returns:
             A ``FetchResponse`` containing the HTTP status code, response
@@ -569,16 +588,8 @@ class ExecutionContext:
         if headers:
             final_headers.update(headers)
 
-        if params:
-            # Handle nested dictionary parameters
-            flat_params = {}
-            for key, value in params.items():
-                if isinstance(value, (dict, list)):
-                    flat_params[key] = jsonX.dumps(value)
-                elif value is not None:
-                    flat_params[key] = str(value)
-            query_string = urlencode(flat_params)
-            url = f"{url}{'&' if '?' in url else '?'}{query_string}"
+        # Nested dictionary and list parameters are sent as JSON
+        url = self._url_with_params(url, params)
 
         # Prepare body
         if data is not None:
@@ -593,6 +604,10 @@ class ExecutionContext:
         # Convert the numeric timeout to a ClientTimeout instance for this request
         client_timeout = aiohttp.ClientTimeout(total=original_timeout)
 
+        # A redirect that is followed is never seen here. When the caller accepts a redirect
+        # status, the response with that status must come back, so nothing is followed.
+        follow_redirects = not any(300 <= status < 400 for status in (accept_statuses or ()))
+
         try:
             async with self._session.request(
                 method=method,
@@ -600,7 +615,8 @@ class ExecutionContext:
                 data=data,
                 headers=final_headers,
                 timeout=client_timeout,
-                ssl=True
+                ssl=True,
+                allow_redirects=follow_redirects
             ) as response:
                 content_type = response.headers.get("Content-Type", "")
 

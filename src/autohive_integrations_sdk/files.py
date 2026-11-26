@@ -23,7 +23,6 @@ import base64
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict, Optional, Tuple
-from urllib.parse import urlencode
 
 import aiohttp
 from jsonschema import Draft7Validator, RefResolver
@@ -191,7 +190,7 @@ class File:
         response = await self._request(source)
         try:
             if not 200 <= response.status < 300:
-                text = (await response.text(errors="replace"))[:500]
+                text = await _error_text(response)
                 raise FileTransferError(f"Download of {self.name!r} failed with HTTP {response.status}: {text}")
             # A compressed body does not have the length that Content-Length gives.
             if self.size is None and response.content_length is not None \
@@ -211,10 +210,7 @@ class File:
                 return await session.get(
                     source.url, headers={"Accept-Encoding": "identity"}, timeout=timeout, allow_redirects=False)
 
-            url = source.url
-            if source.params:
-                query = urlencode({key: str(value) for key, value in source.params.items() if value is not None})
-                url = f"{url}{'&' if '?' in url else '?'}{query}"
+            url = self._context._url_with_params(source.url, source.params)
             headers = self._context._default_headers(source.headers, None, source.send_auth)
             headers.update(source.headers or {})
             headers.setdefault("Accept-Encoding", "identity")
@@ -232,6 +228,14 @@ class File:
 
 def _describe(error: BaseException) -> str:
     return str(error) or type(error).__name__
+
+
+async def _error_text(response: aiohttp.ClientResponse) -> str:
+    """The start of an error response's body, for a message. Empty when the body cannot be read."""
+    try:
+        return (await response.text(errors="replace"))[:500]
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+        return ""
 
 
 async def _bytes_chunks(data: bytes, chunk_size: int) -> AsyncIterator[bytes]:
@@ -423,11 +427,22 @@ async def _upload(file: File, size: int, chunks: AsyncIterator[bytes], context: 
     fields = dict(grant["fields"])
     # The name goes into a multipart header, so characters that would break the header are replaced.
     filename = "".join("_" if char in '"\\\r\n' else char for char in file.name)
+    # A unique part keeps two files with the same name apart.
+    unique_name = f"{uuid.uuid4().hex[:12]}/{filename}"
+    placeholder = "${filename}"
     if grant.get("keyPrefix"):
-        # A unique part keeps two files with the same name apart.
-        key = f"{grant['keyPrefix']}{uuid.uuid4().hex[:12]}/{filename}"
+        key = f"{grant['keyPrefix']}{unique_name}"
+    elif fields["key"].endswith(placeholder):
+        # A grant like this allows every key that starts with the part before the placeholder.
+        key = fields["key"][:-len(placeholder)] + unique_name
     else:
-        key = fields["key"].replace("${filename}", filename)
+        # The grant names one key. A second file would replace the first.
+        key = fields["key"]
+        if key in context._uploaded_file_keys:
+            raise FileTransferError(
+                f"File {file.name!r} cannot be uploaded: the upload grant allows one file, and it is used"
+            )
+    context._uploaded_file_keys.add(key)
     fields["key"] = key
 
     boundary = uuid.uuid4().hex
@@ -472,7 +487,7 @@ async def _upload(file: File, size: int, chunks: AsyncIterator[bytes], context: 
         async with context._ensure_session().post(
                 grant["url"], data=body(), headers=headers, timeout=timeout) as response:
             if response.status not in (200, 201, 204):
-                text = (await response.text(errors="replace"))[:500]
+                text = await _error_text(response)
                 raise FileTransferError(f"Upload of {file.name!r} failed with HTTP {response.status}: {text}")
     except FileTransferError:
         raise

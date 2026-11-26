@@ -9,6 +9,7 @@ import gzip
 import hashlib
 import json
 import os
+from urllib.parse import parse_qs
 
 import pytest
 from aiohttp import web
@@ -56,6 +57,8 @@ class Remote:
         app.router.add_get("/no-length/{name}", self.download_without_length)
         app.router.add_get("/broken/{name}", self.download_broken)
         app.router.add_get("/redirect/{name}", self.redirect)
+        app.router.add_get("/broken-error/{name}", self.error_with_a_broken_body)
+        app.router.add_route("*", "/redirect-to-self", self.redirect_to_self)
         app.router.add_route("*", "/status/{status}", self.status)
         app.router.add_post("/storage", self.upload)
         self.server = TestServer(app)
@@ -100,6 +103,18 @@ class Remote:
     async def redirect(self, request):
         self.record(request)
         raise web.HTTPFound(self.other_origin.url(f"/download/{request.match_info['name']}"))
+
+    async def error_with_a_broken_body(self, request):
+        self.record(request)
+        response = web.StreamResponse(status=404, headers={"Content-Length": "1000"})
+        await response.prepare(request)
+        await response.write(b"partial")
+        request.transport.close()
+        return response
+
+    async def redirect_to_self(self, request):
+        self.record(request)
+        return web.Response(status=308, headers={"Location": str(request.url)}, text="resume incomplete")
 
     async def status(self, request):
         self.record(request)
@@ -679,7 +694,49 @@ async def test_grant_without_a_key_prefix_uses_the_filename_placeholder(tmp_path
     result = await run_action(integration, execute, file_transport=grant)
 
     assert result.type == ResultType.ACTION
-    assert result.result.data["doc"]["key"] == KEY_PREFIX + "plain.bin"
+    key = result.result.data["doc"]["key"]
+    assert key.startswith(KEY_PREFIX) and key.endswith("/plain.bin")
+    assert remote.uploads[0]["fields"]["key"] == key
+
+
+async def test_two_outputs_with_the_same_name_get_different_keys_without_a_key_prefix(tmp_path, remote):
+    data = os.urandom(INLINE_LIMIT_BYTES + 1)
+
+    async def execute(inputs, context):
+        return ActionResult(data={"a": File.from_bytes(data, "same.bin", "a/b"),
+                                  "b": File.from_bytes(data, "same.bin", "a/b")})
+
+    integration = make_integration(tmp_path, output_properties={"a": FILE_REF, "b": FILE_REF})
+    grant = remote.grant()
+    del grant["upload"]["keyPrefix"]
+    result = await run_action(integration, execute, file_transport=grant)
+
+    assert result.type == ResultType.ACTION
+    assert result.result.data["a"]["key"] != result.result.data["b"]["key"]
+
+
+async def test_grant_for_one_key_uploads_one_file_and_refuses_a_second(tmp_path, remote):
+    data = os.urandom(INLINE_LIMIT_BYTES + 1)
+    grant = {"upload": {"url": remote.url("/storage"), "fields": {"key": KEY_PREFIX + "fixed.bin"}}}
+
+    async def one_file(inputs, context):
+        return ActionResult(data={"a": File.from_bytes(data, "a.bin", "a/b")})
+
+    integration = make_integration(tmp_path, output_properties={"a": FILE_REF, "b": FILE_REF})
+    result = await run_action(integration, one_file, file_transport=grant)
+
+    assert result.type == ResultType.ACTION
+    assert result.result.data["a"]["key"] == KEY_PREFIX + "fixed.bin"
+
+    async def two_files(inputs, context):
+        return ActionResult(data={"a": File.from_bytes(data, "a.bin", "a/b"),
+                                  "b": File.from_bytes(data, "b.bin", "a/b")})
+
+    result = await run_action(integration, two_files, file_transport=grant)
+
+    assert result.type == ResultType.ACTION_ERROR
+    assert "allows one file" in result.result.message
+    assert len(remote.uploads) == 2
 
 
 async def test_large_output_without_a_grant_is_an_action_error(tmp_path):
@@ -932,6 +989,53 @@ async def test_from_request_failed_download_is_an_action_error(tmp_path, remote)
     assert "Download of 'gone.bin' failed with HTTP 404: no such file" in result.result.message
 
 
+async def test_failed_download_with_an_error_body_that_cannot_be_read_is_an_action_error(tmp_path, remote):
+    async def execute(inputs, context):
+        return ActionResult(data={"doc": File.from_request(
+            remote.url("/broken-error/a.bin"), name="a.bin", content_type="a/b")})
+
+    integration = make_integration(tmp_path, output_properties={"doc": FILE_REF})
+    result = await run_action(integration, execute)
+
+    assert result.type == ResultType.ACTION_ERROR
+    assert "Download of 'a.bin' failed with HTTP 404" in result.result.message
+
+
+async def test_from_request_sends_structured_params_as_json_like_fetch(tmp_path, remote):
+    remote.files["a.bin"] = b"content"
+    params = {"filter": {"status": "active"}, "ids": [1, 2], "skip": None}
+
+    async def execute(inputs, context):
+        await context.fetch(remote.url("/status/200"), params=params)
+        return ActionResult(data={"doc": File.from_request(
+            remote.url("/download/a.bin"), name="a.bin", content_type="a/b", params=params)})
+
+    integration = make_integration(tmp_path, output_properties={"doc": FILE_REF})
+    result = await run_action(integration, execute)
+
+    assert result.type == ResultType.ACTION
+    fetch_query = remote.requests[0]["path"].split("?", 1)[1]
+    download_query = remote.requests[1]["path"].split("?", 1)[1]
+    assert download_query == fetch_query
+    assert parse_qs(download_query) == {"filter": ['{"status": "active"}'], "ids": ["[1, 2]"]}
+
+
+async def test_from_request_uses_the_callers_authorization_header_in_any_case(tmp_path, remote):
+    remote.files["a.bin"] = b"content"
+
+    async def execute(inputs, context):
+        return ActionResult(data={"doc": File.from_request(
+            remote.url("/download/a.bin"), name="a.bin", content_type="a/b",
+            headers={"authorization": "Basic other-credentials"})})
+
+    integration = make_integration(tmp_path, output_properties={"doc": FILE_REF})
+    result = await run_action(integration, execute, auth=OAUTH)
+
+    assert result.type == ResultType.ACTION
+    assert remote.requests[0]["headers"]["Authorization"] == "Basic other-credentials"
+    assert "secret-token" not in str(remote.requests[0]["headers"])
+
+
 async def test_from_request_file_cannot_be_read_in_the_handler(tmp_path, remote):
     async def execute(inputs, context):
         await File.from_request(remote.url("/download/a.bin"), name="a.bin", content_type="a/b").read()
@@ -1064,6 +1168,46 @@ async def test_fetch_still_raises_for_a_status_that_is_not_accepted(remote):
             await context.fetch(remote.url("/status/404"), accept_statuses=[308])
 
     assert error.value.status == 404
+
+
+async def test_fetch_uses_the_callers_authorization_header_in_any_case(remote):
+    async with ExecutionContext(auth=OAUTH) as context:
+        await context.fetch(remote.url("/status/200"), headers={"authorization": "Basic other-credentials"})
+
+    assert remote.requests[0]["headers"]["Authorization"] == "Basic other-credentials"
+    assert "secret-token" not in str(remote.requests[0]["headers"])
+
+
+async def test_fetch_returns_an_accepted_error_status_and_raises_when_it_is_not_accepted(remote):
+    async with ExecutionContext() as context:
+        response = await context.fetch(remote.url("/status/409"), accept_statuses=[409])
+        with pytest.raises(HTTPError) as error:
+            await context.fetch(remote.url("/status/409"))
+        with pytest.raises(HTTPError):
+            await context.fetch(remote.url("/status/409"), accept_statuses=[429])
+
+    assert (response.status, response.data) == (409, {"ok": True})
+    assert error.value.status == 409
+
+
+async def test_fetch_returns_an_accepted_redirect_status_and_does_not_follow_it(remote):
+    async with ExecutionContext() as context:
+        response = await context.fetch(
+            remote.url("/redirect-to-self"), method="PUT", data=b"chunk", accept_statuses=[308])
+
+    assert response.status == 308
+    assert response.data == "resume incomplete"
+    assert len(remote.requests) == 1
+
+
+async def test_fetch_still_follows_a_redirect_when_no_redirect_status_is_accepted(remote):
+    remote.other_origin.files["a.bin"] = b"redirected content"
+
+    async with ExecutionContext() as context:
+        response = await context.fetch(remote.url("/redirect/a.bin"), accept_statuses=[409])
+
+    assert response.status == 200
+    assert len(remote.other_origin.requests) == 1
 
 
 async def test_fetch_accept_statuses_can_accept_429(remote):

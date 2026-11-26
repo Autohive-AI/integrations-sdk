@@ -116,7 +116,8 @@ upload with `iter_chunks()` and `context.fetch()`. Two options of `fetch()` help
 - `send_auth=False` sends no access token. Some upload URLs carry their own authorisation and
   reject a request that has a token.
 - `accept_statuses=[308]` returns a response with that status and does not raise `HTTPError`. Some
-  services answer `308` between the chunks of an upload.
+  services answer `308` between the chunks of an upload. When a redirect status is accepted, the
+  request follows no redirect.
 
 ```python
 CHUNK_BYTES = 8 * 256 * 1024

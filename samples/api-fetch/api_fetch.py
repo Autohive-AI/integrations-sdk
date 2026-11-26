@@ -6,12 +6,13 @@ Actions:
 - call_api_un_pw: API call with Basic Authentication
 - call_api_header: API call with Bearer token header
 """
-from autohive_integrations_sdk import (
-    Integration, ExecutionContext, ActionHandler, ActionResult
-)
+
+from pathlib import Path
+
+from autohive_integrations_sdk import Integration, ExecutionContext, ActionHandler, ActionResult
 from typing import Dict, Any
 
-api_fetch = Integration.load()
+api_fetch = Integration.load(Path(__file__).with_name("config.json"))
 
 
 @api_fetch.action("call_api")
@@ -22,10 +23,7 @@ class APIFetchAction(ActionHandler):
         url = inputs["url"]
         response = await context.fetch(url)
 
-        return ActionResult(
-            data=response.data,
-            cost_usd=0.01
-        )
+        return ActionResult(data=response.data, cost_usd=0.01)
 
 
 @api_fetch.action("call_api_un_pw")
@@ -45,10 +43,7 @@ class APIFetchActionBasicAuth(ActionHandler):
 
         response = await context.fetch(url)
 
-        return ActionResult(
-            data=response.data,
-            cost_usd=0.01
-        )
+        return ActionResult(data=response.data, cost_usd=0.01)
 
 
 @api_fetch.action("call_api_header")
@@ -59,12 +54,6 @@ class APIFetchActionHeader(ActionHandler):
         url = inputs["url"]
         api_key = context.auth["credentials"].get("api_key", "")
 
-        response = await context.fetch(
-            url,
-            headers={"Authorization": f"Bearer {api_key}"}
-        )
+        response = await context.fetch(url, headers={"Authorization": f"Bearer {api_key}"})
 
-        return ActionResult(
-            data=response.data,
-            cost_usd=0.01
-        )
+        return ActionResult(data=response.data, cost_usd=0.01)

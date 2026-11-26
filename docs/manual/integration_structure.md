@@ -15,11 +15,12 @@ my-integration/
 ├── __init__.py
 ├── requirements.txt
 ├── README.md
-├── icon.png or icon.svg
+├── icon.png                  # or icon.jpg / icon.jpeg, 512×512 pixels
+├── pytest.ini                # Standalone only; omit in an integrations monorepo
 └── tests/
     ├── __init__.py
-    ├── context.py
-    └── test_my_integration.py
+    ├── conftest.py
+    └── test_my_integration_unit.py
 ```
 
 ### Modular Integration (with `actions/`)
@@ -33,15 +34,16 @@ my-integration/
 ├── helpers.py                 # shared utilities (optional)
 ├── requirements.txt
 ├── README.md
-├── icon.png or icon.svg
+├── icon.png                  # or icon.jpg / icon.jpeg, 512×512 pixels
+├── pytest.ini                # Standalone only; omit in an integrations monorepo
 ├── actions/
 │   ├── __init__.py            # imports sub-modules to register handlers
 │   ├── items.py
 │   └── users.py
 └── tests/
     ├── __init__.py
-    ├── context.py
-    └── test_my_integration.py
+    ├── conftest.py
+    └── test_my_integration_unit.py
 ```
 
 In this pattern:
@@ -64,26 +66,32 @@ In this pattern:
 | Entry point (`.py`) | Main Python file referenced by `entry_point` in config |
 | `requirements.txt` | Must include `autohive-integrations-sdk` with `~=` pin |
 | `README.md` | Integration documentation |
-| `icon.png` or `icon.svg` | Integration icon, must be 512×512 pixels |
+| `icon.png`, `icon.jpg`, or `icon.jpeg` | Exactly one integration icon, 512×512 pixels; SVG is not accepted by HiveUp |
 | `tests/` | Test directory |
 
 ### `__init__.py`
 
 - Required for single-file integrations (warning if missing)
 - Optional for modular integrations with an `actions/` subdirectory
-- Can be empty, or contain a minimal import and `__all__`
+- Keep the root file empty in hyphenated integration directories. Relative re-exports can fail when pytest imports it without a package context.
 
 ### `requirements.txt`
 
-Must include the SDK with a compatible release pin:
+For new integrations and SDK upgrades, use a compatible release pin targeting SDK 2.1.0:
 
 ```
-autohive-integrations-sdk~=2.0.0
+autohive-integrations-sdk~=2.1.0
 ```
 
-The `~=` operator means `>=2.0.0, <2.1.0` — you get patch updates but not minor version changes.
+The `~=` operator means `>=2.1.0, <2.2.0` — you get patch updates but not minor version changes. A pin such as `~=2.0.0` excludes 2.1.0. HiveUp's advisory for earlier SDK pins is nonblocking; upgrade existing integrations separately with tests rather than changing pins during an unrelated migration.
 
 Add any additional libraries your integration needs (e.g., `feedparser`, `stripe`).
+
+### Unit tests
+
+Name offline tests `tests/test_*_unit.py` and mark them `unit`; HiveUp uses both the filename pattern and marker. Put fixtures and import setup in `tests/conftest.py`. Mock `context.fetch()` with `FetchResponse`, use the platform auth envelope when auth is configured, and assert `ResultType.ACTION` before inspecting successful output. See [the tutorial's test setup](building_your_first_integration.md#step-6-write-tests) for `pytest.ini` and runnable examples. Live provider tests use `test_*_integration.py` and are run explicitly, not by HiveUp's unit test command.
+
+Use an integration-local `pytest.ini` only for standalone projects. When copying a sample into an integrations monorepo, omit or remove that file and inherit the repository-root pytest configuration so shared fixtures such as `env_credentials` and `make_context` remain available.
 
 ## Naming Conventions
 
@@ -185,7 +193,7 @@ Required fields:
 Optional fields:
 - `scopes`: array of OAuth scopes to request
 
-With platform auth, `context.fetch()` automatically injects the `Authorization` header and returns a `FetchResponse` object (with `.status`, `.headers`, and `.data` attributes).
+With a `PlatformOauth2` runtime envelope, `context.fetch()` automatically injects the `Authorization` header unless you supply one. Local tests must use `{"auth_type": "PlatformOauth2", "credentials": {"access_token": "..."}}`. Successful requests return a `FetchResponse` object with `.status`, `.headers`, and `.data`. SDK 2.1.0 also preserves headers on `HTTPError` and `RateLimitError`; see [HTTP error headers](patterns.md#http-error-headers-sdk-210).
 
 #### No Auth
 
@@ -237,14 +245,17 @@ The `input_schema` and `output_schema` must be valid [JSON Schema (Draft 7)](htt
 
 ## Validation
 
-The [autohive-integrations-tooling](https://github.com/autohive-ai/autohive-integrations-tooling) validates all of the above:
+Install HiveUp using the [Tooling installation instructions](https://github.com/Autohive-AI/autohive-integrations-tooling#install-hiveup-from-a-local-build); it is not published to PyPI. From the parent of the integration directory:
 
 ```bash
-# Validate structure and config
-python scripts/validate_integration.py my-integration
+# Run validation, code-quality checks, and unit tests
+hiveup validate my-integration
 
 # Check that config.json actions match Python code
-python scripts/check_config_sync.py my-integration
+hiveup check sync my-integration
+
+# Run only unit tests, using the integration's dependency pins
+hiveup test my-integration
 ```
 
 See the tooling repo's documentation for setup instructions and the full list of checks.

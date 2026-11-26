@@ -2,8 +2,9 @@
 
 ## Prerequisites
 
-- The integration must be on **SDK 2.0.0** (`autohive-integrations-sdk~=2.0.0` in `requirements.txt`)
-- If the integration is still on SDK 1.x, upgrade it first using the `upgrading-sdk-v2` skill
+- These examples target released **SDK 2.1.0**; recommend `autohive-integrations-sdk~=2.1.0` for new integrations and explicit upgrades.
+- For an older integration, check its pinned contract and scope any upgrade separately using [upgrading-sdk-v2](../upgrading-sdk-v2/SKILL.md). Test-only edits and private-to-public moves do not implicitly upgrade its SDK or behavior.
+- Use installed Python HiveUp (Python 3.13+) for isolated unit runs. See the [local-build installation instructions](https://github.com/Autohive-AI/autohive-integrations-tooling#install-hiveup-from-a-local-build); HiveUp is not on PyPI.
 
 ## File Structure
 
@@ -117,8 +118,8 @@ Prefer plain imports — reach for the `importlib` form only when there's a conc
 
 The repo-wide [`conftest.py`](https://github.com/Autohive-AI/autohive-integrations/blob/master/conftest.py) already provides three fixtures every test can use:
 
-- `mock_context` — minimal `ExecutionContext` with `ctx.auth = {}` and `ctx.fetch` as an `AsyncMock`
-- `make_context` — factory for building a context with arbitrary `auth=...`
+- `mock_context` — `MagicMock` context with `ctx.auth = {}` and `ctx.fetch` as an `AsyncMock`
+- `make_context` — factory for building a mock context with arbitrary `auth=...`
 - `env_credentials` — helper that reads env vars (with `.env` autoloaded), returns `None` if missing
 
 You don't need to redeclare these. Override `mock_context` only when the integration reads credentials from `context.auth` and you want every test to inherit the shape — see the snippet in the conftest.py section above.
@@ -165,7 +166,23 @@ ctx.auth = {
 
 Handlers read individual credentials directly from the envelope via `context.auth["credentials"]` (for example `context.auth["credentials"].get("api_key")`).
 
-Using the wrong shape — flat auth, or an envelope missing `auth_type` — will cause `ResultType.VALIDATION_ERROR` (with `source="auth"`) before the action handler runs, making tests false negatives.
+When `auth.fields` is configured, flat auth, an envelope missing a valid `auth_type`, or missing required credentials causes `ResultType.VALIDATION_ERROR` with `result.result["source"] == "auth"` before the action handler runs. This inner-credentials validation shipped in 2.0.1; do not empty `auth.fields.required` to bypass it.
+
+Test this contract through `execute_action`, using valid action inputs so input validation does not mask the auth failure. For an action requiring `api_key`:
+
+```python
+@pytest.mark.asyncio
+async def test_missing_required_api_key(make_context):
+    ctx = make_context(auth={"auth_type": "Custom", "credentials": {}})
+
+    result = await myintegration.execute_action("get_item", {"id": "123"}, ctx)
+
+    assert result.type == ResultType.VALIDATION_ERROR
+    assert result.result["source"] == "auth"
+    ctx.fetch.assert_not_awaited()
+```
+
+Pair this negative test with a successful `execute_action` test using the full wrapped credentials, as in the happy-path example below. Adapt the action name, inputs, and credential keys to `config.json`.
 
 ## Test Categories
 
@@ -189,6 +206,7 @@ class TestGetContact:
             "get_contact", {"email": "test@example.com"}, mock_context
         )
 
+        assert result.type == ResultType.ACTION
         assert result.result.data["contact"]["id"] == "123"
 ```
 
@@ -294,6 +312,7 @@ Tests that verify the response data has the expected keys and structure.
             "get_company", {"company_id": "123"}, mock_context
         )
 
+        assert result.type == ResultType.ACTION
         assert "company" in result.result.data
         assert result.result.data["company"]["id"] == "123"
 ```
@@ -315,6 +334,7 @@ Tests for integration-specific behavior like timestamp conversion, date parsing,
             "get_notes", {"contact_id": "1"}, mock_context
         )
 
+        assert result.type == ResultType.ACTION
         assert "UTC" in result.result.data["notes"][0]["properties"]["hs_timestamp"]
 ```
 
@@ -338,8 +358,26 @@ mock_context.fetch.side_effect = [
 ### Exception from fetch
 
 ```python
-mock_context.fetch.side_effect = Exception("HTTP 500: Internal Server Error")
+from autohive_integrations_sdk import HTTPError, RateLimitError
+
+mock_context.fetch.side_effect = HTTPError(500, "Internal Server Error")
+
+# SDK 2.1.0: use mixed-case header names to exercise case-insensitive lookup.
+mock_context.fetch.side_effect = HTTPError(
+    409,
+    "Duplicate record",
+    {"error": "duplicate"},
+    headers={"X-Allow-Duplicates": "test-override", "X-Internal-Trace": "do-not-disclose"},
+)
+
+mock_context.fetch.side_effect = RateLimitError(
+    30, 429, "Rate limit exceeded", headers={"Retry-After": "30"}
+)
 ```
+
+Choose the exception that matches the test; these assignments are alternatives. Do not mock an HTTP failure by returning `FetchResponse(status=409, ...)`: the real SDK raises instead. Test a handler's `ActionError` only if it catches that exception; otherwise assert propagation with `pytest.raises(HTTPError)` or `pytest.raises(RateLimitError)`.
+
+When a handler deliberately exposes a provider header, test lowercase and mixed-case names, absent headers, the relevant status code, and that unrelated header values are not disclosed. SDK 2.1.0 keeps `exc.headers` separate from `str(exc)`; neither tests nor code should log or return the entire header mapping. `RateLimitError.retry_after` and fetch retry behavior did not change in 2.1.0; an `AsyncMock` tests handler behavior, not SDK transport retries.
 
 ### DELETE responses (204 No Content)
 
@@ -478,13 +516,12 @@ Every action should have at minimum:
 2. **Identify helper functions** — test pure functions first (easiest)
 3. **Create test file(s)** with boilerplate header and `mock_context` fixture
 4. **Write tests action by action** — go through each test category
-5. **Run tests**: `python -m pytest <integration>/tests/test_*_unit.py -v`
+5. **Run isolated unit tests**: `hiveup test <integration>`; inspect counts and skips, not only the exit code
 6. **Lint and format**:
    ```bash
-   ruff check --fix <integration>/tests
-   ruff format --config ../autohive-integrations-tooling/ruff.toml <integration>/tests
+   hiveup validate --only lint,format --fix <integration>
    ```
-7. **Verify all pass** before committing
+7. **Run the full profile**: `hiveup validate --base-ref <base-ref> <integration>` using the fetched PR target ref. Omit `--base-ref` only for non-PR work and report skipped history checks. See [building-integration](../building-integration/SKILL.md) for details.
 
 ## Common Gotchas
 
@@ -494,7 +531,7 @@ Every action should have at minimum:
 
 3. **SDK input validation**: The SDK validates inputs against `config.json` schemas before the action handler runs. If you pass invalid inputs (wrong type, missing required field), the result will have `type == ResultType.VALIDATION_ERROR` and the handler never executes. This means `mock_context.fetch` is never called.
 
-4. **ActionError vs ActionResult**: Error paths return `ActionError(message=...)` which results in `result.type == ResultType.ACTION_ERROR` and `result.result.message` containing the error. Happy paths return `ActionResult(data=...)` which results in `result.result.data` containing the response.
+4. **ActionError vs ActionResult**: Error paths return `ActionError(message=...)` with `result.type == ResultType.ACTION_ERROR` and the error in `result.result.message`. For success, assert `result.type == ResultType.ACTION` before reading `result.result.data`; validation errors contain a different payload shape.
 
 5. **Silent exception blocks**: Some actions have `except Exception: continue` or `except Exception: pass` — these are intentional skip-on-failure patterns. Don't write error tests for these; they don't return ActionError.
 

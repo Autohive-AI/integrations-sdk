@@ -4,15 +4,16 @@ My Integration — brief description of what this integration does.
 Actions:
 - my_action: Describe what this action does.
 """
-from autohive_integrations_sdk import (
-    Integration, ExecutionContext, ActionHandler, ActionResult
-)
+
+from pathlib import Path
+
+from autohive_integrations_sdk import Integration, ExecutionContext, ActionHandler, ActionResult
 from typing import Dict, Any
 
-integration = Integration.load()
+my_integration = Integration.load(Path(__file__).with_name("config.json"))
 
 
-@integration.action("my_action")
+@my_integration.action("my_action")
 class MyAction(ActionHandler):
     """Handles the my_action action."""
 
@@ -22,7 +23,9 @@ class MyAction(ActionHandler):
 
         response = await context.fetch(
             "https://api.example.com/endpoint",
-            headers={"Authorization": f"Bearer {api_key}"}
+            method="POST",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={"example_input": example_input},
         )
 
-        return ActionResult(data=response.data)
+        return ActionResult(data={"result": response.data})

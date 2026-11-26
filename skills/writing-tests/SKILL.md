@@ -14,4 +14,4 @@ An integration has two kinds of tests. Read the file for the kind you are writin
 
 When asked to "write tests" for an integration without more detail, write the unit tests first. Add integration tests when the task asks for live, e2e, or integration tests, or when the integration already has them.
 
-Both kinds require the integration to be on **SDK 2.0.0** (`autohive-integrations-sdk~=2.0.0` in `requirements.txt`). If it is still on SDK 1.x, upgrade it first with the `upgrading-sdk-v2` skill.
+These examples target released **SDK 2.1.0**; recommend `autohive-integrations-sdk~=2.1.0` for new integrations and explicit upgrades. For an older integration, check its pinned contract and scope any upgrade separately with [upgrading-sdk-v2](../upgrading-sdk-v2/SKILL.md). Test-only edits and private-to-public moves do not implicitly upgrade its SDK or behavior.

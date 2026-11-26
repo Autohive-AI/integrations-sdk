@@ -47,16 +47,18 @@ from autohive_integrations_sdk import ActionResult
 When your integration has `supports_billing: true`, your action handlers should return `ActionResult` with the `cost_usd` field to report the cost of each execution:
 
 ```python
+from pathlib import Path
+
 from autohive_integrations_sdk import Integration, ExecutionContext, ActionHandler, ActionResult
 from typing import Dict, Any
 
-integration = Integration.load()
+integration = Integration.load(Path(__file__).with_name("config.json"))
 
 @integration.action("call_api")
 class CallApiAction(ActionHandler):
     async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
         url = inputs["url"]
-        credentials = context.auth.get("credentials", {})
+        credentials = context.auth["credentials"]
         api_key = credentials.get("api_key", "")
 
         response = await context.fetch(url, headers={"Authorization": f"Bearer {api_key}"})
@@ -82,7 +84,7 @@ For integrations calling APIs with per-request pricing, calculate and report the
 class GenerateContentAction(ActionHandler):
     async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
         prompt = inputs["prompt"]
-        credentials = context.auth.get("credentials", {})
+        credentials = context.auth["credentials"]
         api_key = credentials.get("api_key", "")
 
         response = await context.fetch(

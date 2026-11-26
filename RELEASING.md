@@ -41,26 +41,33 @@ Existing integration dependency pins must be checked separately: for example,
   release as described above.
 
 * Update `pyproject.toml` as required:
-    - Version 
+    - Version (also update the exported `__version__` in `src/autohive_integrations_sdk/__init__.py`)
     - Development Status
     - Authors
     - Dependencies
 
 * Update `RELEASENOTES.md` with an entry for the new version.
 
-* Run the test suite and ensure all tests pass:
-    ```
+* In a Python 3.13+ virtual environment on the intended release branch, install test and release tools, then run the tests:
+    ```bash
+    python -m pip install -e ".[test]" build twine pdoc
     python -m pytest tests/ -v --cov=autohive_integrations_sdk --cov-report=term-missing
     ```
 
-* Release to PyPi:
-    - `build` is required (`python3 -m pip install --upgrade build`)
-    - `twine` is required (`python3 -m pip install --upgrade twine`)
-
-    Build:
+* Regenerate API docs from that branch's source **before the final build or release tag**:
+    ```bash
+    pdoc -o docs/apidocs src/autohive_integrations_sdk
     ```
-    # Build from sdk main directory, this will create the package in dist/
-    python3 -m build
+    Review and commit the updated `docs/apidocs/` files alongside the version and API changes. These files are tracked. Do not generate support-release docs from development `master` or hand-edit generated HTML to correct source docstrings.
+
+* Check that the manifest version, exported `__version__`, release notes, and intended tag agree. Build from the reviewed release commit with a clean tracked worktree. Existing integration pins and sample compatibility checks are separate from the SDK's own suite; documentation aimed at released 2.1.0 should also pass the [released-sample tests](README.md#testing-the-samples-against-sdk-210).
+
+* Build and check the distributions. The commands below read the version from `pyproject.toml`; use a new, empty version-specific output directory so stale distributions cannot be uploaded accidentally:
+
+    ```bash
+    VERSION=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+    python -m build --outdir "dist/$VERSION"
+    python -m twine check "dist/$VERSION/"*
     ```
     Typical output:
     ```
@@ -75,17 +82,11 @@ Existing integration dependency pins must be checked separately: for example,
     * Building wheel...
     Successfully built autohive_integrations_sdk-<a.b.c>.tar.gz and autohive_integrations_sdk-<a.b.c>-py3-none-any.whl
     ```
-* Regenerate API docs:
-    - `pdoc` is required (`python3 -m pip install --upgrade pdoc`)
-    ```
-    pdoc -o docs/apidocs src/autohive_integrations_sdk
-    ```
-    - Commit the updated `docs/apidocs/` files — these are tracked in version control.
+* Install the built wheel in a separate Python 3.13+ virtual environment without an editable SDK checkout. Verify that the installed package metadata and exported `__version__` match the intended release, then rerun the SDK tests with test dependencies installed. This checks the distribution, not just imports from source.
 
-* Release to PyPi — Upload:
-    ```
-    # Upload to PyPi, use API token from our secrets management
-    python3 -m twine upload dist/autohive_integrations_sdk-<a.b.c>*
+* With release approval, tag the tested commit and upload only the checked distributions. Use the PyPI API token from secrets management:
+    ```bash
+    python -m twine upload "dist/$VERSION/"*
     ```
     Typical output:
     ```
@@ -100,3 +101,5 @@ Existing integration dependency pins must be checked separately: for example,
     https://pypi.org/project/autohive-integrations-sdk/<a.b.c>/
 
     ```
+
+* Verify the published package version and tag commit after upload. Keep the release commit, tag, and built wheel provenance together; do not publish a 2.x maintenance release from the 3.x development line.

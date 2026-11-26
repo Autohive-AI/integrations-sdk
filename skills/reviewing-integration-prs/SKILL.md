@@ -28,7 +28,7 @@ Apply these existing skills when the PR touches their area:
 | Any integration implementation, config, README, or tests changed | `building-integration` |
 | Unit tests added or changed | `writing-tests` (`unit-tests.md`) |
 | Integration tests or `tests/teamcity.env` added or changed | `writing-tests` (`integration-tests.md`) |
-| `requirements.txt` changes SDK 1.x → 2.x, or fetch handling changes | `upgrading-sdk-v2` |
+| SDK 1.x → 2.x or 2.0.x → 2.1.0 upgrade, or fetch handling changes | `upgrading-sdk-v2` |
 | Private → public migration, copied integration, public publishing | `migrating-private-integration` |
 
 When reviewing, explicitly say which sub-skill contexts applied. Example: “Applied: building-integration, writing-tests (integration).”
@@ -47,24 +47,22 @@ Identify:
 Useful commands when reviewing locally:
 
 ```bash
-git diff --name-status origin/master...HEAD
-python ../autohive-integrations-tooling/scripts/get_changed_dirs.py origin/master
+git diff --name-status <base-ref>...HEAD
 ```
+
+Replace `<base-ref>` with the actual, fetched PR target ref; do not assume the default branch name.
 
 ### 2. Run or inspect tooling validation
 
-For changed integration directories, verify the same checks CI runs:
+Use the installed Python HiveUp CLI (Python 3.13+). Follow the [local-build installation instructions](https://github.com/Autohive-AI/autohive-integrations-tooling#install-hiveup-from-a-local-build) if needed; HiveUp is **not published to PyPI**. From the integrations repository root, run the changed-integration CI profile:
 
 ```bash
-DIRS=$(python ../autohive-integrations-tooling/scripts/get_changed_dirs.py origin/master)
-python ../autohive-integrations-tooling/scripts/validate_integration.py $DIRS
-python ../autohive-integrations-tooling/scripts/check_code.py --base-ref origin/master $DIRS
-python ../autohive-integrations-tooling/scripts/run_tests.py $DIRS
-python ../autohive-integrations-tooling/scripts/check_readme.py origin/master $DIRS
-python ../autohive-integrations-tooling/scripts/check_version_bump.py origin/master $DIRS
+hiveup ci --base-ref <base-ref>
 ```
 
-If you cannot run these, inspect CI logs or state clearly that validation was not run.
+This runs structure, code, unit tests, README, and version checks. For a specific integration, use `hiveup validate --base-ref <base-ref> <integration>`. For focused checks, use `hiveup check readme --base-ref <base-ref> <integration>`, `hiveup check version --base-ref <base-ref> <integration>`, or `hiveup test <integration>`. Legacy Tooling scripts and the .NET CLI are not the primary workflow.
+
+If you cannot run HiveUp, inspect CI logs or state clearly that validation was not run. A zero exit can include warnings or skipped checks; inspect the reported results and test counts.
 
 Do not stop at “CI is green.” Still inspect the diff for security, auth, schema, test, and documentation quality.
 
@@ -107,12 +105,11 @@ For migrations to public, apply the `migrating-private-integration` security/saf
 
 For integrations using `auth.type == "custom"`, verify the config, code, and tests match the Autohive runtime contract:
 
-- `auth.fields` describes the same auth object shape the SDK/platform passes to `context.auth` at execution time. Do not assume flat or wrapped credentials without checking the current SDK/platform contract.
-- If `auth.fields.required` is present, it matches that runtime auth shape and covers credentials that must be present before handlers run. Non-empty `required` arrays are valid when they match the SDK/platform contract.
-- `auth.fields.properties` declares every credential field that action code reads from `context.auth`, including nested credential fields if the runtime contract is wrapped.
-- Action code does not read undeclared credential keys from `context.auth`.
-- At least one unit test exercises `integration.execute_action(...)` with the expected SDK/platform auth shape, rather than only testing helper functions or using a convenient mock shape.
-- Tests cover missing required credentials when the config uses `auth.fields.required`, so credential validation is not accidentally bypassed.
+- In released SDK 2.1.0, `context.auth` is `{"auth_type": "Custom", "credentials": {...}}`; `auth.fields` validates the inner `credentials` object, not the envelope. This validation fix shipped in 2.0.1.
+- `auth.fields.properties` declares the credentials read by handlers through `context.auth["credentials"]`. Keep `auth.fields.required` for credentials that must exist before handlers run; do not remove it to make a test pass.
+- At least one unit test exercises `integration.execute_action(...)` with the wrapped auth shape and asserts `ResultType.ACTION` before reading successful result data.
+- Missing required credentials produce `ResultType.VALIDATION_ERROR` with `result.result["source"] == "auth"` before the handler runs. Tests verify that the fetch mock was not awaited.
+- For a pure migration pinned to an earlier SDK, review that released contract without silently upgrading it. Report any compatibility problem and scope an SDK upgrade separately.
 - Live integration tests, if present, are not treated as CI coverage unless the CI logs explicitly show they were run.
 
 Ask explicitly during review: **Does this PR test the same SDK/platform contract that production will use?**
@@ -125,6 +122,7 @@ For unit tests, apply `writing-tests` (`unit-tests.md`):
 
 - Tests are named `test_*_unit.py`.
 - They use `mock_context`, `make_context`, and `FetchResponse` correctly for SDK 2.x.
+- Successful execution asserts `result.type == ResultType.ACTION` before accessing `result.result.data`.
 - They cover happy paths, request shape, validation/error paths, edge cases, and response shape where applicable.
 - Test credential strings use placeholders and `# nosec B105` where needed.
 
@@ -132,7 +130,7 @@ For integration tests, apply `writing-tests` (`integration-tests.md`):
 
 - Tests are named `test_*_integration.py` and marked `pytest.mark.integration`.
 - Destructive tests are marked `pytest.mark.destructive` and clean up data where possible.
-- `live_context` returns `FetchResponse` for SDK 2.x `context.fetch` paths.
+- `live_context` uses a real SDK `ExecutionContext` as an async context manager. Do not substitute an aiohttp `real_fetch` wrapper that returns error statuses as successful `FetchResponse` objects or bypasses SDK auth, parsing, or rate-limit behavior.
 - Tests skip cleanly when credentials or required test IDs are missing.
 - Every env var read by `env_credentials(...)`, `os.environ.get(...)`, `os.getenv(...)`, `os.environ[...]`, or equivalent helpers is listed as a blank template entry in root `.env.example`.
 - Optional test IDs, destructive-test-only variables, and module-level env constants count; either document them in root `.env.example` or remove unused reads.
@@ -151,9 +149,11 @@ Missing `.env.example` entries are blockers when the PR adds or changes integrat
 
 If the PR upgrades an integration to SDK 2.x or changes fetch handling, apply `upgrading-sdk-v2`:
 
-- `requirements.txt` pins `autohive-integrations-sdk~=2.0.0`.
+- New integrations and explicit upgrades use the recommended `autohive-integrations-sdk~=2.1.0` pin. Do not require a pin change during an unrelated edit or a pure private-to-public move.
 - `context.fetch()` results access `.data` for response body.
 - Unit/integration test fetch mocks return `FetchResponse`.
+- HTTP failure mocks raise `HTTPError` or `RateLimitError` rather than returning a success-shaped response with an error status.
+- When code uses the 2.1.0 `exc.headers` feature, it matches header names case-insensitively and deliberately discloses only selected values needed by the caller, never all headers. Retry behavior is unchanged.
 - Error paths return `ActionError(message=...)` instead of success-shaped error data.
 - Error-only `error` / `result` fields are removed from success output schemas where applicable.
 - `config.json` version bump is appropriate for an existing integration upgrade.
@@ -194,7 +194,7 @@ Applied sub-skills: building-integration, writing-tests (unit, integration)
 - [file:line] Optional improvement.
 
 ### Validation
-- Tooling run: `validate_integration.py ...` / `check_code.py ...` / `run_tests.py ...`
+- HiveUp commands run:
 - Tests run or inspected:
 - Not run:
 ```

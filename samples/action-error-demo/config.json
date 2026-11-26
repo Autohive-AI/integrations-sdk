@@ -5,9 +5,6 @@
     "description": "Demonstrates the three result types from action handlers: ActionResult, ActionError, and unhandled exceptions.",
     "entry_point": "action_error_demo.py",
     "supports_billing": true,
-    "auth": {
-        "type": "none"
-    },
     "actions": {
         "get_user": {
             "display_name": "Get User",

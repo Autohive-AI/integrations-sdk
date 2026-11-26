@@ -178,6 +178,64 @@ async def test_file_declared_inside_all_of_is_converted(tmp_path):
     assert await seen["doc"].read() == b"a"
 
 
+async def test_file_in_properties_beside_any_of_is_converted_with_the_file_in_the_branch(tmp_path):
+    schema = {
+        "type": "object",
+        "properties": {"invoice": FILE_REF},
+        "anyOf": [{"properties": {"receipt": FILE_REF}, "required": ["receipt"]}],
+    }
+
+    inputs = {"invoice": wire_content(b"invoice"), "receipt": wire_content(b"receipt")}
+    result, seen = await run_and_capture(tmp_path, schema, inputs)
+
+    assert result.type == ResultType.ACTION
+    assert await seen["invoice"].read() == b"invoice"
+    assert await seen["receipt"].read() == b"receipt"
+
+
+async def test_files_in_every_branch_of_any_of_that_the_value_matches_are_converted(tmp_path):
+    schema = {
+        "type": "object",
+        "anyOf": [
+            {"properties": {"invoice": FILE_REF}, "required": ["invoice"]},
+            {"properties": {"receipt": FILE_REF}, "required": ["receipt"]},
+            {"properties": {"other": FILE_REF}, "required": ["other"]},
+        ],
+    }
+
+    inputs = {"invoice": wire_content(b"invoice"), "receipt": wire_content(b"receipt")}
+    result, seen = await run_and_capture(tmp_path, schema, inputs)
+
+    assert result.type == ResultType.ACTION
+    assert await seen["invoice"].read() == b"invoice"
+    assert await seen["receipt"].read() == b"receipt"
+
+
+@pytest.mark.parametrize("union", ["oneOf", "anyOf"])
+@pytest.mark.parametrize("union_first", [False, True])
+async def test_branch_that_names_a_file_declared_elsewhere_is_still_matched(tmp_path, union, union_first):
+    declared = {"properties": {"invoice": FILE_REF}}
+    both = {union: [{"properties": {"invoice": FILE_REF, "receipt": FILE_REF}, "required": ["invoice", "receipt"]}]}
+    schema = {"type": "object", "allOf": [both, declared] if union_first else [declared, both]}
+
+    inputs = {"invoice": wire_content(b"invoice"), "receipt": wire_content(b"receipt")}
+    result, seen = await run_and_capture(tmp_path, schema, inputs)
+
+    assert result.type == ResultType.ACTION
+    assert await seen["invoice"].read() == b"invoice"
+    assert await seen["receipt"].read() == b"receipt"
+
+
+async def test_input_without_files_is_passed_to_the_handler_as_it_is(tmp_path):
+    schema = {"type": "object", "properties": {"doc": {"anyOf": [{"type": "null"}, FILE_REF]}, "tags": {"type": "array"}}}
+
+    inputs = {"doc": None, "tags": ["a", {"b": 1}]}
+    result, seen = await run_and_capture(tmp_path, schema, inputs)
+
+    assert result.type == ResultType.ACTION
+    assert seen == inputs
+
+
 async def test_file_behind_a_reference_into_the_same_schema_is_converted(tmp_path):
     schema = {
         "type": "object",

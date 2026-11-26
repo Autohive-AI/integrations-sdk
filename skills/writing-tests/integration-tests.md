@@ -16,16 +16,15 @@ To run the tests in TeamCity, the same variables must also be supplied through `
 
 ## Prerequisites
 
-- The integration must be on **SDK 2.0.0** (`autohive-integrations-sdk~=2.0.0` in `requirements.txt`)
-- If the integration is still on SDK 1.x, upgrade it first using the `upgrading-sdk-v2` skill
-- `aiohttp` must be available in the test environment (used by the `live_context` fixture)
+- These examples target released **SDK 2.1.0**; recommend `autohive-integrations-sdk~=2.1.0` for new integrations and explicit upgrades. Scope upgrades separately for older integrations; a test-only edit or pure private-to-public move does not implicitly change its SDK or behavior.
+- Use a Python 3.13+ local venv with the integration's `requirements.txt` and the repository's test dependencies, including `pytest-asyncio`, installed. The SDK provides the HTTP transport; do not replace it with an aiohttp `real_fetch` wrapper.
 - A valid API key or OAuth token for the target service
 
 ## How Integration Tests Differ from Unit Tests
 
 | Aspect | Unit Tests | Integration Tests |
 |---|---|---|
-| Network calls | Mocked via `mock_context` | Real via `live_context` + aiohttp |
+| Network calls | Mocked via `mock_context` | Real via `live_context` using SDK `ExecutionContext` |
 | File suffix | `_unit.py` | `_integration.py` |
 | Marker | `pytest.mark.unit` | `pytest.mark.integration` |
 | CI | GitHub Actions on every PR | Never in GitHub Actions; non-destructive tests run in TeamCity |
@@ -47,7 +46,7 @@ myintegration/tests/
 └── test_myintegration_integration.py
 ```
 
-### Double Exclusion from CI
+### Double Exclusion from GitHub Actions
 
 Integration tests are excluded from GitHub Actions CI and default `pytest` runs by **two mechanisms**:
 
@@ -77,8 +76,8 @@ non-destructive ones.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from autohive_integrations_sdk import FetchResponse
+import pytest_asyncio
+from autohive_integrations_sdk import ExecutionContext
 from autohive_integrations_sdk.integration import ResultType
 
 from myintegration import myintegration
@@ -95,12 +94,14 @@ Use the `importlib` fallback boilerplate from [`unit-tests.md`](unit-tests.md) o
 The repo-wide [`conftest.py`](https://github.com/Autohive-AI/autohive-integrations/blob/master/conftest.py) provides an `env_credentials` fixture that auto-loads the project `.env` and reads variables on demand:
 
 ```python
-@pytest.fixture
-def live_context(env_credentials, make_context):
+@pytest_asyncio.fixture
+async def live_context(env_credentials):
     api_key = env_credentials("MYINTEGRATION_API_KEY")
     if not api_key:
         pytest.skip("MYINTEGRATION_API_KEY not set — skipping integration tests")
-    return make_context(auth={"auth_type": "Custom", "credentials": {"api_key": api_key}})
+    auth = {"auth_type": "Custom", "credentials": {"api_key": api_key}}
+    async with ExecutionContext(auth=auth) as context:
+        yield context
 ```
 
 This is the recommended pattern for any test that needs API credentials: it skips automatically when the env var is missing, integrates with the project `.env`, and avoids per-test boilerplate.
@@ -160,6 +161,7 @@ Use a clearly labeled block in root `.env.example`:
 
 ```bash
 # -- MyIntegration --
+MYINTEGRATION_API_KEY=
 MYINTEGRATION_ACCESS_TOKEN=
 MYINTEGRATION_TEST_ITEM_ID=
 MYINTEGRATION_TEST_PROJECT_ID=
@@ -169,104 +171,59 @@ Before finishing, cross-check the integration test file against `.env.example`: 
 
 ## The live_context Fixture
 
-The `live_context` fixture provides a `MagicMock` of the SDK's `ExecutionContext` but replaces the `fetch` method with a real async HTTP client using `aiohttp`. This lets the integration code run unchanged while making real network calls.
+Use a real SDK `ExecutionContext` as an async context manager. It returns `FetchResponse` for successful requests and preserves released SDK parsing, HTTP errors, rate limits, OAuth token injection, and session cleanup. The repository's `make_context` is a mock factory with an `AsyncMock` fetch; it is not a live context.
+
+Replace existing aiohttp `real_fetch` fixtures with this pattern instead of adding transport wrappers. A wrapper that simply returns `FetchResponse(status=resp.status, ...)` turns HTTP failures into apparent successes and bypasses `HTTPError` and `RateLimitError`. SDK 2.1.0 adds exception headers, not a new retry policy.
 
 ### Variant 1: No Auth (public APIs)
 
 For integrations that call public APIs with no authentication (e.g., Hacker News):
 
 ```python
-@pytest.fixture
-def live_context():
-    import aiohttp
-
-    async def real_fetch(url, *, method="GET", json=None, headers=None, **kwargs):
-        async with aiohttp.ClientSession() as session:
-            async with session.request(method, url, json=json, headers=headers) as resp:
-                data = await resp.json(content_type=None)
-                return FetchResponse(
-                    status=resp.status,
-                    headers=dict(resp.headers),
-                    data=data,
-                )
-
-    ctx = MagicMock(name="ExecutionContext")
-    ctx.fetch = AsyncMock(side_effect=real_fetch)
-    ctx.auth = {}
-    return ctx
+@pytest_asyncio.fixture
+async def live_context():
+    async with ExecutionContext(auth={}) as context:
+        yield context
 ```
 
 ### Variant 2: API Key Auth
 
-For integrations where the action handler adds the API key to headers itself (e.g., Perplexity):
+For integrations where the action handler reads credentials and adds the API key to headers itself, use the custom auth fixture from the environment-variables example:
 
 ```python
-@pytest.fixture
-def live_context():
-    if not API_KEY:
+@pytest_asyncio.fixture
+async def live_context(env_credentials):
+    api_key = env_credentials("MYINTEGRATION_API_KEY")
+    if not api_key:
         pytest.skip("MYINTEGRATION_API_KEY not set — skipping integration tests")
-
-    import aiohttp
-
-    async def real_fetch(url, *, method="GET", json=None, headers=None, **kwargs):
-        async with aiohttp.ClientSession() as session:
-            async with session.request(method, url, json=json, headers=headers) as resp:
-                data = await resp.json()
-                return FetchResponse(status=resp.status, headers=dict(resp.headers), data=data)
-
-    ctx = MagicMock(name="ExecutionContext")
-    ctx.fetch = AsyncMock(side_effect=real_fetch)
-    ctx.auth = {}
-    return ctx
+    auth = {"auth_type": "Custom", "credentials": {"api_key": api_key}}
+    async with ExecutionContext(auth=auth) as context:
+        yield context
 ```
+
+Adapt the credential keys to `config.json`. `auth.fields` describes the inner `credentials` object, and required credentials must be present; do not remove `required` fields to make live tests pass.
 
 ### Variant 3: Platform OAuth (token injection)
 
-For integrations that rely on the SDK's platform auth layer to inject the OAuth token. In tests, bypass the SDK auth by manually adding the `Authorization` header:
+For integrations that rely on SDK token injection, supply the platform envelope and let the real SDK add the `Authorization` header:
 
 ```python
-@pytest.fixture
-def live_context():
-    if not ACCESS_TOKEN:
+@pytest_asyncio.fixture
+async def live_context(env_credentials):
+    access_token = env_credentials("MYINTEGRATION_ACCESS_TOKEN")
+    if not access_token:
         pytest.skip("MYINTEGRATION_ACCESS_TOKEN not set — skipping integration tests")
-
-    import aiohttp
-
-    async def real_fetch(url, *, method="GET", json=None, headers=None, params=None, **kwargs):
-        merged_headers = dict(headers or {})
-        merged_headers["Authorization"] = f"Bearer {ACCESS_TOKEN}"
-        async with aiohttp.ClientSession() as session:
-            async with session.request(method, url, json=json, headers=merged_headers, params=params) as resp:
-                data = await resp.json(content_type=None)
-                return FetchResponse(
-                    status=resp.status,
-                    headers=dict(resp.headers),
-                    data=data,
-                )
-
-    ctx = MagicMock(name="ExecutionContext")
-    ctx.fetch = AsyncMock(side_effect=real_fetch)
-    ctx.auth = {
+    auth = {
         "auth_type": "PlatformOauth2",
-        "credentials": {"access_token": ACCESS_TOKEN},
+        "credentials": {"access_token": access_token},
     }
-    return ctx
+    async with ExecutionContext(auth=auth) as context:
+        yield context
 ```
 
 ### Variant 4: External Python SDK (no `context.fetch`)
 
-Some integrations don't go through `context.fetch` at all — instead they instantiate a third-party Python SDK and let it make the HTTP calls (e.g. `from supadata import Supadata`). For these, the `aiohttp` wrapper is irrelevant: the SDK does its own networking. Just inject the credentials via `make_context` and the upstream library handles the rest:
-
-```python
-@pytest.fixture
-def live_context(env_credentials, make_context):
-    api_key = env_credentials("MYINTEGRATION_API_KEY")
-    if not api_key:
-        pytest.skip("MYINTEGRATION_API_KEY not set — skipping integration tests")
-    return make_context(auth={"auth_type": "Custom", "credentials": {"api_key": api_key}})
-```
-
-This variant is the simplest of the four — no `real_fetch` definition needed. Use it whenever the integration's source imports a vendor SDK and calls it directly rather than calling `context.fetch`.
+Some integrations instantiate a third-party Python SDK and let it make HTTP calls, for example `from supadata import Supadata`. Use the same real `ExecutionContext` with the auth envelope the handler expects, such as Variant 2 for custom auth. The vendor library handles networking on that path, so the SDK's `fetch` errors and retry policy do not govern those vendor calls. Do not add a `real_fetch` function that the integration never uses.
 
 **How to choose**:
 
@@ -296,6 +253,7 @@ class TestCreateItem:
         result = await myintegration.execute_action(
             "create_item", {"name": f"Integration Test {os.getpid()}"}, live_context
         )
+        assert result.type == ResultType.ACTION
         data = result.result.data
         assert "item" in data
         assert data["item"]["id"] is not None
@@ -397,6 +355,7 @@ class TestGetBitlink:
     async def test_fetches_bitlink_details(self, live_context):
         # First get a real ID from a list action
         list_result = await myintegration.execute_action("list_items", {"size": 1}, live_context)
+        assert list_result.type == ResultType.ACTION
         items = list_result.result.data["items"]
 
         if not items:
@@ -406,6 +365,7 @@ class TestGetBitlink:
 
         # Then test the action that needs the ID
         result = await myintegration.execute_action("get_item", {"id": item_id}, live_context)
+        assert result.type == ResultType.ACTION
         data = result.result.data
         assert "item" in data
 ```
@@ -424,25 +384,31 @@ class TestItemLifecycle:
         create_result = await myintegration.execute_action(
             "create_item", {"name": f"Integration test {os.getpid()}"}, live_context
         )
+        assert create_result.type == ResultType.ACTION
         item_id = create_result.result.data["item"]["id"]
         assert item_id is not None
 
         # Step 2: Read
         read_result = await myintegration.execute_action("get_item", {"id": item_id}, live_context)
+        assert read_result.type == ResultType.ACTION
         assert read_result.result.data["item"]["id"] == item_id
 
         # Step 3: Update
         update_result = await myintegration.execute_action(
             "update_item", {"id": item_id, "name": "Updated name"}, live_context
         )
+        assert update_result.type == ResultType.ACTION
         assert update_result.result.data["success"] is True
 
         # Step 4: Delete (cleanup)
         delete_result = await myintegration.execute_action("delete_item", {"id": item_id}, live_context)
+        assert delete_result.type == ResultType.ACTION
         assert delete_result.result.data["success"] is True
 ```
 
 ## What to Assert
+
+Assert `result.type == ResultType.ACTION` before reading `result.result.data`. SDK input/auth/output validation failures return `VALIDATION_ERROR` with a different payload shape; missing required credentials report `result.result["source"] == "auth"`. Test missing credentials in unit tests without sending a live request.
 
 Integration tests validate that the integration works against the real API. Focus on:
 
@@ -650,7 +616,7 @@ The comment shows only test names. Assertion messages and skip reasons are in th
 
 1. **Read the integration source** — understand each action and its auth mechanism
 2. **Check `config.json`** — determine auth type (none / API key / platform OAuth)
-3. **Choose the right `live_context` variant** — see the three variants above
+3. **Choose the right auth variant** — use a real `ExecutionContext` and the matching envelope; vendor SDK calls use the same credentials but their own transport
 4. **Document env vars in root `.env.example` (required)** — add every env var referenced by the integration test file in the same PR; missing entries should block integration-test PRs
 5. **Add `tests/teamcity.env`** — see [Running Live Tests in TeamCity](#running-live-tests-in-teamcity)
 6. **Write read-only tests first** — these are safe to run repeatedly
@@ -670,11 +636,11 @@ The comment shows only test names. Assertion messages and skip reasons are in th
 
 ## Common Gotchas
 
-1. **content_type=None in resp.json()**: Some APIs return JSON without a proper `Content-Type` header. Always use `await resp.json(content_type=None)` in the `real_fetch` function to avoid `ContentTypeError`.
+1. **Response parsing**: Use the released SDK's parser in live tests. If a provider returns JSON without an appropriate `Content-Type`, SDK 2.1.0 returns text in `.data`; test the integration's deliberate handling rather than silently making the fixture parse differently.
 
-2. **Test isolation**: Each test creates a new `aiohttp.ClientSession`. This is intentional — integration tests should not share session state.
+2. **Test isolation**: Use a function-scoped async context fixture so each test gets its own SDK session and closes it afterward.
 
-3. **Rate limiting**: If the API has rate limits, add a small `asyncio.sleep` between tests or reduce the number of tests that hit the same endpoint.
+3. **Rate limiting and error headers**: HTTP 429 raises `RateLimitError` immediately; its `retry_after` and the existing transient-network retry policy are unchanged in 2.1.0. Reduce live request volume rather than building a different retry policy into the fixture. Both `HTTPError` and `RateLimitError` expose `exc.headers`; match names case-insensitively and deliberately disclose only selected provider values, not the full header mapping. Cover failure/header branches with unit mocks rather than provoking real rate limits.
 
 4. **Dynamic test data**: Never hardcode IDs from the live API. Use environment variables for pre-existing objects, or chain actions (list → get) within the test.
 

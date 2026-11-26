@@ -144,7 +144,7 @@ class ExampleAPI:
 
     @staticmethod
     def get_headers(context: ExecutionContext) -> Dict[str, str]:
-        credentials = context.auth.get("credentials", {})
+        credentials = context.auth["credentials"]
         token = credentials.get("access_token", "")
         return {
             "Authorization": f"Bearer {token}",
@@ -211,7 +211,8 @@ Define multiple properties in the `auth.fields` schema:
                 "label": "Subdomain",
                 "help_text": "Your subdomain (e.g., 'yourcompany' from yourcompany.freshdesk.com)"
             }
-        }
+        },
+        "required": ["api_key", "domain"]
     }
 }
 ```
@@ -226,12 +227,12 @@ is allowed and recommended. Read credentials directly from the envelope via
 
 ```python
 def get_base_url(context: ExecutionContext) -> str:
-    credentials = context.auth.get("credentials", {})
+    credentials = context.auth["credentials"]
     domain = credentials.get("domain", "")
     return f"https://{domain}.freshdesk.com/api/v2"
 
 def get_headers(context: ExecutionContext) -> Dict[str, str]:
-    credentials = context.auth.get("credentials", {})
+    credentials = context.auth["credentials"]
     api_key = credentials.get("api_key", "")
     auth_bytes = f"{api_key}:X".encode("ascii")
     return {
@@ -241,6 +242,45 @@ def get_headers(context: ExecutionContext) -> Dict[str, str]:
 ```
 
 This pattern is used by integrations like [Freshdesk](https://github.com/Autohive-AI/autohive-integrations/tree/master/freshdesk) (API key + domain), [Trello](https://github.com/Autohive-AI/autohive-integrations/tree/master/trello) (API key + token), and [Google Looker](https://github.com/Autohive-AI/autohive-integrations/tree/master/google-looker) (base URL + client ID + client secret).
+
+## HTTP error headers (SDK 2.1.0)
+
+Successful requests return headers on `FetchResponse.headers`. SDK 2.1.0 also makes failed-response headers available as `HTTPError.headers` and `RateLimitError.headers`. Match header names case-insensitively: the SDK stores a plain dictionary, and providers can vary capitalization.
+
+For example, a provider might return an `X-Allow-Duplicates` override code with HTTP 409. In an action registered as `update_record`, return only that code so the caller can decide what to do:
+
+```python
+from autohive_integrations_sdk import ActionError, HTTPError
+
+
+@integration.action("update_record")
+class UpdateRecordAction(ActionHandler):
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult | ActionError:
+        try:
+            response = await context.fetch(
+                f"{BASE_URL}/records/{inputs['record_id']}",
+                method="PUT",
+                json=inputs["record"],
+            )
+        except HTTPError as exc:
+            override_code = next(
+                (value for name, value in exc.headers.items() if name.lower() == "x-allow-duplicates"),
+                None,
+            )
+            if exc.status == 409 and override_code:
+                return ActionError(
+                    message=f"Duplicate record. Provider override code: {override_code}. Ask before retrying."
+                )
+            raise
+
+        return ActionResult(data=response.data)
+```
+
+The action's configuration must define required `record_id` (string) and `record` (object) inputs and an output schema matching the provider's successful response. This example does not retry or apply an override automatically. Unrecognized conflicts and other HTTP errors propagate.
+
+Do not return or log the complete headers dictionary; it can contain cookies or other sensitive values. The SDK does not append headers to `str(exc)`; this is not general secret redaction of response bodies or URLs. If you construct an error in a test, use the optional keyword-only argument, such as `HTTPError(409, "Conflict", headers={"X-Allow-Duplicates": "override-7"})`. Existing positional calls still work, and `headers` defaults to `{}`.
+
+`RateLimitError` inherits `headers` and keeps its existing `retry_after` value. SDK 2.1.0 does not change retries: HTTP 429 raises `RateLimitError` without automatic retry; transient network errors use the existing retry policy. Preserve the real SDK fetch behavior in live tests rather than replacing it with an HTTP wrapper that treats error responses as successes.
 
 ## Code Quality Conventions
 
@@ -272,7 +312,7 @@ Never hardcode API keys, tokens, or secrets. Always read them from `context.auth
 headers = {"Authorization": "Bearer sk-abc123"}
 
 # CORRECT
-credentials = context.auth.get("credentials", {})
+credentials = context.auth["credentials"]
 api_key = credentials.get("api_key", "")
 headers = {"Authorization": f"Bearer {api_key}"}
 ```

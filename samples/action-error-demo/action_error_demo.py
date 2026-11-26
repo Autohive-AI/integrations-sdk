@@ -7,12 +7,13 @@ Actions:
 - lookup_user: Returns ActionError when the user is not found (expected app-level error).
 - lookup_user_with_cost: Returns ActionError with cost_usd when a chargeable lookup fails.
 """
-from autohive_integrations_sdk import (
-    Integration, ExecutionContext, ActionHandler, ActionResult, ActionError
-)
+
+from pathlib import Path
+
+from autohive_integrations_sdk import Integration, ExecutionContext, ActionHandler, ActionResult, ActionError
 from typing import Dict, Any
 
-action_error_demo = Integration.load()
+action_error_demo = Integration.load(Path(__file__).with_name("config.json"))
 
 # Simulated user database
 USERS = {
@@ -61,7 +62,7 @@ class LookupUserAction(ActionHandler):
     Pass user_id "1" or "2" for success; any other value returns ActionError.
     """
 
-    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult | ActionError:
         user_id = inputs["user_id"]
         user = USERS.get(user_id)
 
@@ -81,14 +82,14 @@ class LookupUserWithCostAction(ActionHandler):
     Pass user_id "1" or "2" for success; any other value returns ActionError + cost.
     """
 
-    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult:
+    async def execute(self, inputs: Dict[str, Any], context: ExecutionContext) -> ActionResult | ActionError:
         user_id = inputs["user_id"]
         user = USERS.get(user_id)
 
         if user is None:
             return ActionError(
                 message=f"User '{user_id}' not found.",
-                cost_usd=0.001  # Lookup was billed even though the user wasn't found
+                cost_usd=0.001,  # Lookup was billed even though the user wasn't found
             )
 
         return ActionResult(data=user, cost_usd=0.001)

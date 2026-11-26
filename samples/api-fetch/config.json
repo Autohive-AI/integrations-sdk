@@ -53,12 +53,7 @@
             },
             "output_schema": {
                 "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "description": "The data returned from the API call."
-                    }
-                }
+                "description": "The JSON object returned by the API."
             }
         },
         "call_api_un_pw": {
@@ -76,12 +71,7 @@
             },
             "output_schema": {
                 "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "description": "The data returned from the API call."
-                    }
-                }
+                "description": "The JSON object returned by the API."
             }
         },
         "call_api_header": {
@@ -99,12 +89,7 @@
             },
             "output_schema": {
                 "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "description": "The data returned from the API call."
-                    }
-                }
+                "description": "The JSON object returned by the API."
             }
         }
     }

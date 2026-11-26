@@ -832,6 +832,44 @@ async def test_file_without_content_is_an_action_error(tmp_path):
     assert "has no content" in result.result.message
 
 
+async def test_cost_is_kept_when_an_output_file_cannot_be_read(tmp_path):
+    async def execute(inputs, context):
+        return ActionResult(data={"doc": File("empty.bin", "a/b")}, cost_usd=0.25)
+
+    integration = make_integration(tmp_path, output_properties={"doc": FILE_REF})
+    result = await run_action(integration, execute)
+
+    assert result.type == ResultType.ACTION_ERROR
+    assert result.result.cost_usd == 0.25
+
+
+async def test_cost_is_kept_when_an_upload_fails(tmp_path, remote):
+    remote.upload_status = 403
+
+    async def execute(inputs, context):
+        file = File.from_bytes(bytes(INLINE_LIMIT_BYTES + 1), "big.bin", "a/b")
+        return ActionResult(data={"doc": file}, cost_usd=0.25)
+
+    integration = make_integration(tmp_path, output_properties={"doc": FILE_REF})
+    result = await run_action(integration, execute, file_transport=remote.grant())
+
+    assert result.type == ResultType.ACTION_ERROR
+    assert result.result.cost_usd == 0.25
+
+
+async def test_file_error_raised_inside_the_handler_is_an_action_error_without_a_cost(tmp_path):
+    async def execute(inputs, context):
+        await File("empty.bin", "a/b").read()
+        return ActionResult(data={}, cost_usd=0.25)
+
+    integration = make_integration(tmp_path)
+    result = await run_action(integration, execute)
+
+    assert result.type == ResultType.ACTION_ERROR
+    assert "has no content" in result.result.message
+    assert result.result.cost_usd is None
+
+
 async def test_file_transfer_error_is_not_exported():
     import autohive_integrations_sdk
 

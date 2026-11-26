@@ -88,5 +88,5 @@ HiveUp exits `0` for passed, warning, or skipped results; `1` for check failures
 | Bandit security issue | Add `# nosec B105` for test credential strings; fix real issues |
 | Config-code sync | Ensure actions in `config.json` match handlers in source code |
 | Missing test files | Create `tests/test_<name>_unit.py` using the [writing-unit-tests skill](../writing-unit-tests/SKILL.md); preserve scope for pure migrations |
-| Import errors | Check `requirements.txt` has all dependencies; check `__init__.py` exports |
+| Import errors | Check `requirements.txt` has all dependencies; keep the root `__init__.py` empty |
 | Integration tests use env vars but `.env.example` missing entries | Add blank entries for every referenced env var to root `.env.example`; treat as blocking for PRs adding/changing integration tests |

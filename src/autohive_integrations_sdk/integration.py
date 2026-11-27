@@ -38,7 +38,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union, Type, TypeVar, Generic, ClassVar
+from typing import Dict, Any, List, Optional, Union, Type, TypeVar, Generic, ClassVar, Collection
 from urllib.parse import urlencode
 
 # Third-Party Imports
@@ -408,16 +408,25 @@ class ExecutionContext:
         request_config: Override default ``max_retries`` (3) and ``timeout`` (30 s).
         metadata: Arbitrary metadata forwarded to handlers.
         logger: Custom logger; falls back to ``logging.getLogger(__name__)``.
+        file_transport: How the SDK moves large files.  The platform sets it; integration
+            code does not.  ``upload`` is the grant for output files,
+            ``{"url", "fields", "keyPrefix", "maxBytes"}``; without it, an output file
+            larger than the inline limit fails.  ``input_url_filter`` is a function that
+            takes the URL of an input file and returns the URL to download, or ``None``
+            to refuse it.
     """
     def __init__(
         self,
         auth: Dict[str, Any] = {}, 
         request_config: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        logger: Optional[logging.Logger] = None
+        logger: Optional[logging.Logger] = None,
+        file_transport: Optional[Dict[str, Any]] = None,
     ):
         self.auth = auth
         """Authentication configuration"""
+        self.file_transport = file_transport or {}
+        """File transport configuration from the platform"""
         self.config = request_config or {"max_retries": 3, "timeout": 30}
         """Request configuration"""
         self.metadata = metadata or {}
@@ -425,6 +434,7 @@ class ExecutionContext:
         self.logger = logger or logging.getLogger(__name__)
         """Logger instance"""
         self._session: Optional[aiohttp.ClientSession] = None
+        self._uploaded_file_keys: set = set()
         self._integration_name: Optional[str] = None
         self._integration_version: Optional[str] = None
 
@@ -437,6 +447,52 @@ class ExecutionContext:
         if self._session:
             await self._session.close()
             self._session = None
+
+    def _ensure_session(self) -> aiohttp.ClientSession:
+        if not self._session:
+            self._session = aiohttp.ClientSession()
+        return self._session
+
+    def _default_headers(
+            self,
+            headers: Optional[Dict[str, str]],
+            user_agent: Optional[str],
+            send_auth: bool = True,
+    ) -> Dict[str, str]:
+        """The headers the SDK adds to a request: ``User-Agent`` and, for platform OAuth, the token.
+
+        ``headers`` are the caller's own. They are not included in the result; a header the
+        caller gave is left out here, so that the caller's value wins when the two are merged.
+        """
+        final_headers = {}
+
+        if not any(key.lower() == "user-agent" for key in (headers or {})):
+            final_headers["User-Agent"] = user_agent or self._build_default_user_agent()
+
+        # Header names are not case-sensitive, so "authorization" from the caller counts too.
+        has_authorization = any(key.lower() == "authorization" for key in (headers or {}))
+        if send_auth and self.auth and not has_authorization:
+            auth_type = AuthType(self.auth.get("auth_type", "PlatformOauth2"))
+            credentials = self.auth.get("credentials", {})
+
+            if auth_type == AuthType.PlatformOauth2 and "access_token" in credentials:
+                final_headers["Authorization"] = f"Bearer {credentials['access_token']}"
+
+        return final_headers
+
+    @staticmethod
+    def _url_with_params(url: str, params: Optional[Dict[str, Any]]) -> str:
+        """Add query parameters to a URL. A dict or list value is sent as JSON; ``None`` is left out."""
+        if not params:
+            return url
+        flat_params = {}
+        for key, value in params.items():
+            if isinstance(value, (dict, list)):
+                flat_params[key] = jsonX.dumps(value)
+            elif value is not None:
+                flat_params[key] = str(value)
+        query_string = urlencode(flat_params)
+        return f"{url}{'&' if '?' in url else '?'}{query_string}"
 
     def _set_integration_identity(self, name: Optional[str], version: Optional[str]) -> None:
         """Attach integration identity for SDK-generated request metadata."""
@@ -464,7 +520,9 @@ class ExecutionContext:
             content_type: Optional[str] = None,
             timeout: Optional[int] = None,
             retry_count: int = 0,
-            user_agent: Optional[str] = None
+            user_agent: Optional[str] = None,
+            send_auth: bool = True,
+            accept_statuses: Optional[Collection[int]] = None,
     ) -> FetchResponse:
         """Make an HTTP request with automatic retries and error handling.
 
@@ -476,7 +534,8 @@ class ExecutionContext:
 
         For **platform OAuth** integrations (``auth_type == "PlatformOauth2"``),
         a ``Bearer`` token is auto-injected from ``auth.credentials.access_token``
-        unless an ``Authorization`` header is explicitly provided.
+        unless an ``Authorization`` header is explicitly provided or ``send_auth``
+        is false.
 
         Retries up to ``max_retries`` (default 3) on transient network errors
         with exponential back-off.  HTTP 429 responses raise ``RateLimitError``
@@ -498,6 +557,15 @@ class ExecutionContext:
             content_type: ``Content-Type`` header value.
             timeout: Per-request timeout in seconds (overrides ``request_config``).
             retry_count: Internal — current retry attempt number.
+            send_auth: Set to false to send no platform OAuth token.  Use it for a
+                URL that carries its own authorisation, such as a pre-signed
+                upload URL, which can reject a request that has a token.
+            accept_statuses: Non-2xx status codes to return as a normal
+                ``FetchResponse`` instead of raising ``HTTPError``.  For example,
+                a resumable upload can answer ``308`` between chunks.  When a
+                redirect status (3xx) is accepted, this request follows no
+                redirect, so that the accepted response is the one returned.
+                Any other redirect status then raises ``HTTPError``.
 
         Returns:
             A ``FetchResponse`` containing the HTTP status code, response
@@ -505,43 +573,24 @@ class ExecutionContext:
 
         Raises:
             RateLimitError: On HTTP 429 with the ``Retry-After`` value.
-            HTTPError: On any other non-2xx status.
+            HTTPError: On any other non-2xx status that is not in ``accept_statuses``.
         """
-        if not self._session:
-            self._session = aiohttp.ClientSession()
+        self._ensure_session()
 
         # Prepare request
         if json is not None:
             data = json
             content_type = "application/json"
 
-        final_headers = {}
-
-        if not any(key.lower() == "user-agent" for key in (headers or {})):
-            final_headers["User-Agent"] = user_agent or self._build_default_user_agent()
-        
-        if self.auth and "Authorization" not in (headers or {}):
-            auth_type = AuthType(self.auth.get("auth_type", "PlatformOauth2"))
-            credentials = self.auth.get("credentials", {})
-            
-            if auth_type == AuthType.PlatformOauth2 and "access_token" in credentials:
-                final_headers["Authorization"] = f"Bearer {credentials['access_token']}"
+        final_headers = self._default_headers(headers, user_agent, send_auth)
 
         if content_type:
             final_headers["Content-Type"] = content_type
         if headers:
             final_headers.update(headers)
 
-        if params:
-            # Handle nested dictionary parameters
-            flat_params = {}
-            for key, value in params.items():
-                if isinstance(value, (dict, list)):
-                    flat_params[key] = jsonX.dumps(value)
-                elif value is not None:
-                    flat_params[key] = str(value)
-            query_string = urlencode(flat_params)
-            url = f"{url}{'&' if '?' in url else '?'}{query_string}"
+        # Nested dictionary and list parameters are sent as JSON
+        url = self._url_with_params(url, params)
 
         # Prepare body
         if data is not None:
@@ -556,6 +605,10 @@ class ExecutionContext:
         # Convert the numeric timeout to a ClientTimeout instance for this request
         client_timeout = aiohttp.ClientTimeout(total=original_timeout)
 
+        # A redirect that is followed is never seen here. When the caller accepts a redirect
+        # status, the response with that status must come back, so nothing is followed.
+        follow_redirects = not any(300 <= status < 400 for status in (accept_statuses or ()))
+
         try:
             async with self._session.request(
                 method=method,
@@ -563,11 +616,18 @@ class ExecutionContext:
                 data=data,
                 headers=final_headers,
                 timeout=client_timeout,
-                ssl=True
+                ssl=True,
+                allow_redirects=follow_redirects
             ) as response:
                 content_type = response.headers.get("Content-Type", "")
 
-                if response.status == 429:  # Rate limit
+                # When redirects are followed, a 3xx that arrives here has no redirect to follow,
+                # and it is returned as before. When they are not followed, a redirect status is
+                # a success only if the caller accepts that status.
+                success = response.ok if follow_redirects else 200 <= response.status < 300
+                accepted = success or response.status in (accept_statuses or ())
+
+                if response.status == 429 and not accepted:  # Rate limit
                     retry_after = int(response.headers.get("Retry-After", 60))
                     raise RateLimitError(
                         retry_after,
@@ -590,7 +650,7 @@ class ExecutionContext:
 
                 response_headers = dict(response.headers)
 
-                if not response.ok:
+                if not accepted:
                     print(f"HTTP error encountered. Status: {response.status}. Result: {result}")
                     raise HTTPError(
                         response.status,
@@ -618,6 +678,8 @@ class ExecutionContext:
                     url, method, params, data, json,
                     headers, content_type, original_timeout, retry_count + 1,
                     user_agent=user_agent,
+                    send_auth=send_auth,
+                    accept_statuses=accept_statuses,
                 )
             else:
                 print("Max retries reached. Raising error.")
@@ -908,7 +970,7 @@ class Integration:
 
             # Each input declared with the file schema becomes a File
             try:
-                inputs = convert_file_inputs(action_config.input_schema, inputs)
+                inputs = convert_file_inputs(action_config.input_schema, inputs, context)
             except FileTransferError as e:
                 raise ValidationError(str(e), action_config.input_schema, source="input")
 
@@ -920,11 +982,11 @@ class Integration:
             try:
                 result = await handler.execute(inputs, context)
 
-                # Each File in the result becomes its wire form
+                # Each File in the result becomes its wire form. A large file is uploaded here.
                 if isinstance(result, ActionResult):
-                    result.data = await convert_file_outputs(result.data)
+                    result.data = await convert_file_outputs(result.data, context)
             except FileTransferError as e:
-                # A file whose content cannot be read is an action failure, not a crash.
+                # A file the SDK could not download or upload is an action failure, not a crash.
                 # The handler has run by then, so a cost that it reported is kept.
                 cost_usd = result.cost_usd if isinstance(result, ActionResult) else None
                 result = ActionError(message=str(e), cost_usd=cost_usd)

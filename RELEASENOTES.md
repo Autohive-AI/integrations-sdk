@@ -4,7 +4,8 @@
 
 ### New Feature: files
 
-An action can now declare a file field explicitly. See [Files](docs/manual/files.md).
+An action can now declare a file field explicitly, and the SDK moves the file
+content. See [Files](docs/manual/files.md).
 
 - **A file type.** A field is a file when its schema in `config.json` is
   `{"$ref": "https://cdn.autohive.com/schemas/sdk/file/v1.json"}`. The property
@@ -12,18 +13,44 @@ An action can now declare a file field explicitly. See [Files](docs/manual/files
   The SDK validates against its own copy of the schema; nothing is fetched.
 - **`File` objects.** A handler receives a `File` for each file input and
   returns a `File` for each file output. `File.read()` returns the content, and
-  `File.from_bytes(data, name, content_type)` builds a file to return.
+  `File.iter_chunks(n)` yields it in pieces of exactly `n` bytes (the last can
+  be shorter).
+- **Large files without the memory cost.** The platform sends a large input as
+  a URL, and the SDK downloads it only when the handler reads it. An output file
+  over 3 MB is uploaded to the platform's storage after the handler returns, as
+  a stream. `File.from_request(url, ...)` returns a file from another service
+  without holding it in memory.
+- **Transfer failures are action errors.** When the SDK cannot download or
+  upload a file, the action returns an `ActionError` that names the file and the
+  cause.
 
 ```python
-@integration.action("convert")
-class Convert(ActionHandler):
+@integration.action("get_file")
+class GetFile(ActionHandler):
     async def execute(self, inputs, context):
-        source: File = inputs["document"]
-        pdf = to_pdf(await source.read())
+        metadata = (await context.fetch(f"{API}/files/{inputs['file_id']}")).data
         return ActionResult(data={
-            "pdf": File.from_bytes(pdf, f"{source.name}.pdf", "application/pdf"),
+            "file": File.from_request(
+                f"{API}/files/{inputs['file_id']}/content",
+                name=metadata["name"],
+                content_type=metadata["mimeType"],
+                size=metadata["size"],
+            ),
         })
 ```
+
+### New: `fetch()` options for chunked uploads
+
+- `send_auth=False` sends no platform OAuth token. Use it for a URL that
+  carries its own authorisation.
+- `accept_statuses=[...]` returns a response with one of these non-2xx statuses
+  as a normal `FetchResponse` and does not raise `HTTPError`. For example, a
+  resumable upload can answer `308` between chunks.
+
+### New: `ExecutionContext(file_transport=...)`
+
+The platform passes its file transport settings here. Integration code does not
+set it. Without it, an output file over 3 MB fails with an `ActionError`.
 
 ### Compatibility
 
@@ -31,6 +58,11 @@ class Convert(ActionHandler):
   uses the older convention (an object with `content`, `name` and
   `contentType`) is passed to the handler unchanged, as a `dict`. Change the
   schema and the handler of an action together.
+- On SDK 3, the platform can deliver a large file input in its URL form. A
+  field that still uses the older convention is not downloaded for the handler.
+  Declare each file field with the reference before moving an integration to
+  SDK 3.
+- `fetch()` behaves as before when the new options are not used.
 
 ## 2.1.0
 

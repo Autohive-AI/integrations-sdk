@@ -65,8 +65,9 @@ async for chunk in invoice.iter_chunks(1024 * 1024):
 ```
 
 `iter_chunks(n)` yields pieces of exactly `n` bytes; only the last can be shorter. The platform
-sends a large file as a URL, and the SDK downloads it when the handler first reads it. A file that
-is downloaded can be read only once.
+sends a large file as a URL, and the SDK downloads it when the handler reads it. The SDK does not
+keep the content, so each read of a large file is a new download. An input file can also be put in
+the result, whether the handler read it or not.
 
 ## Return an output file
 

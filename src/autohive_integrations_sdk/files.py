@@ -111,7 +111,7 @@ class File:
         self.size = size
         self._source = _source
         self._context: Any = None
-        self._consumed = False
+        self._requested = False
 
     def __repr__(self) -> str:
         return f"File(name={self.name!r}, content_type={self.content_type!r}, size={self.size!r})"
@@ -167,7 +167,7 @@ class File:
     async def iter_chunks(self, chunk_size: int = DEFAULT_CHUNK_BYTES) -> AsyncIterator[bytes]:
         """Yield the content in pieces of exactly ``chunk_size`` bytes. The last can be shorter.
 
-        A file that is downloaded can be read only once.
+        A large input is not kept in memory, so each read of it is a new download.
         """
         if chunk_size < 1:
             raise ValueError("chunk_size must be at least 1")
@@ -189,9 +189,13 @@ class File:
             raise FileTransferError(
                 f"File {self.name!r} is downloaded by the SDK after the action returns; it cannot be read here"
             )
-        if self._consumed:
-            raise FileTransferError(f"File {self.name!r} has already been read")
-        self._consumed = True
+        if isinstance(source, _Request):
+            # A request to another service is made once: it can have an effect there.
+            if self._requested:
+                raise FileTransferError(
+                    f"File {self.name!r} is in the result more than once, and its request has already been made")
+            self._requested = True
+        # An input that the platform delivered as a URL is downloaded again for each read.
 
         response = await self._request(source)
         try:

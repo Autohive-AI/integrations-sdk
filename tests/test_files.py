@@ -371,20 +371,42 @@ async def test_iter_chunks_rejects_a_chunk_size_below_one():
             pass
 
 
-async def test_url_input_read_twice_is_an_action_error(tmp_path, remote):
-    remote.files["a.bin"] = b"x" * 10
+async def test_url_input_can_be_read_again_and_each_read_is_a_new_download(tmp_path, remote):
+    remote.files["a.bin"] = os.urandom(10_000)
+    seen = []
 
     async def execute(inputs, context):
-        await inputs["doc"].read()
-        await inputs["doc"].read()
+        seen.append(await inputs["doc"].read())
+        seen.append(await inputs["doc"].read())
         return ActionResult(data={})
 
     integration = make_integration(tmp_path, {"doc": FILE_REF})
     value = {"name": "a.bin", "contentType": "text/plain", "url": remote.url("/download/a.bin")}
     result = await run_action(integration, execute, {"doc": value})
 
-    assert result.type == ResultType.ACTION_ERROR
-    assert "already been read" in result.result.message
+    assert result.type == ResultType.ACTION
+    assert seen == [remote.files["a.bin"], remote.files["a.bin"]]
+    assert len(remote.requests) == 2
+
+
+async def test_url_input_can_be_read_in_full_after_a_read_that_stopped_part_way(tmp_path, remote):
+    remote.files["a.bin"] = os.urandom(10_000)
+    seen = {}
+
+    async def execute(inputs, context):
+        async for chunk in inputs["doc"].iter_chunks(1000):
+            seen["first"] = chunk
+            break
+        seen["all"] = await inputs["doc"].read()
+        return ActionResult(data={})
+
+    integration = make_integration(tmp_path, {"doc": FILE_REF})
+    value = {"name": "a.bin", "contentType": "text/plain", "url": remote.url("/download/a.bin")}
+    result = await run_action(integration, execute, {"doc": value})
+
+    assert result.type == ResultType.ACTION
+    assert seen["first"] == remote.files["a.bin"][:1000]
+    assert seen["all"] == remote.files["a.bin"]
 
 
 async def test_failed_input_download_is_an_action_error(tmp_path, remote):
@@ -909,7 +931,40 @@ async def test_input_file_can_be_returned_as_an_output(tmp_path, remote):
     assert remote.uploads[0]["sha256"] == sha256(remote.files["big.bin"])
 
 
+async def test_url_input_that_the_handler_read_can_be_returned_as_an_output(tmp_path, remote):
+    remote.files["big.bin"] = os.urandom(INLINE_LIMIT_BYTES + 5)
+    seen = {}
+
+    async def execute(inputs, context):
+        seen["sha256"] = sha256(await inputs["doc"].read())
+        return ActionResult(data={"doc": inputs["doc"]})
+
+    integration = make_integration(tmp_path, {"doc": FILE_REF}, {"doc": FILE_REF})
+    value = {"name": "big.bin", "contentType": "a/b", "url": remote.url("/download/big.bin"),
+             "sizeBytes": INLINE_LIMIT_BYTES + 5}
+    result = await run_action(integration, execute, {"doc": value}, file_transport=remote.grant())
+
+    assert result.type == ResultType.ACTION
+    assert seen["sha256"] == sha256(remote.files["big.bin"])
+    assert remote.uploads[0]["sha256"] == sha256(remote.files["big.bin"])
+
+
 # ── File.from_request ────────────────────────────────────────────────────────
+
+
+async def test_from_request_file_that_is_in_a_result_twice_is_an_action_error(tmp_path, remote):
+    remote.files["a.bin"] = b"content"
+
+    async def execute(inputs, context):
+        doc = File.from_request(remote.url("/download/a.bin"), name="a.bin", content_type="a/b")
+        return ActionResult(data={"doc": doc, "copy": doc})
+
+    integration = make_integration(tmp_path, output_properties={"doc": FILE_REF, "copy": FILE_REF})
+    result = await run_action(integration, execute)
+
+    assert result.type == ResultType.ACTION_ERROR
+    assert "request has already been made" in result.result.message
+    assert len(remote.requests) == 1
 
 
 async def test_from_request_streams_a_large_download_to_storage(tmp_path, remote):
